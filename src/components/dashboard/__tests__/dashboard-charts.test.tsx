@@ -37,6 +37,7 @@ describe("Dashboard chart components", () => {
 
     expect(screen.getByRole("heading", { name: /top tracks/i })).toBeInTheDocument()
     const table = screen.getByRole("table")
+    expect(table).toBeInTheDocument()
     expect(screen.getByText("Track 1")).toBeInTheDocument()
     expect(screen.getByText("Artist A")).toBeInTheDocument()
     expect(screen.getByText("2.4 hrs")).toBeInTheDocument()
