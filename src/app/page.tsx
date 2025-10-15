@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 
 type SpotifyHistoryEntry = {
   endTime?: string | null
@@ -79,6 +80,11 @@ const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
     return null
   }
 
+  const parsedDate = new Date(timestamp)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null
+  }
+
   const msPlayed = entry.msPlayed ?? entry.ms_played ?? null
   const artist =
     entry.master_metadata_album_artist_name ?? entry.artistName ?? null
@@ -86,55 +92,266 @@ const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
     entry.master_metadata_track_name ?? entry.trackName ?? null
 
   return {
-    ts: new Date(timestamp),
+    ts: parsedDate,
     artist,
     track,
     ms_played: msPlayed,
   }
 }
 
-export default function UploadPage() {
-  const [status, setStatus] = useState('')
+type StatusState = {
+  state: 'idle' | 'validating' | 'uploading' | 'success' | 'error'
+  message: string
+}
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+const BATCH_SIZE = 500
 
-    const text = await file.text()
-    const parsed = JSON.parse(text)
+const formatFileSize = (size: number) => {
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+  return `${size} B`
+}
 
-    setStatus('Processing...')
-    if (!Array.isArray(parsed)) {
-      setStatus('Invalid file format')
+type UploadDropzoneProps = {
+  onFileAccepted: (file: File) => void
+  isBusy: boolean
+  selectedFile: File | null
+}
+
+function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const [file] = Array.from(files)
+    onFileAccepted(file)
+  }
+
+  const onDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (isBusy) return
+    setIsDragging(true)
+  }
+
+  const onDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.currentTarget.contains(event.relatedTarget as Node)) {
       return
     }
+    setIsDragging(false)
+  }
 
-    const rows = parsed
-      .map(toSpotifyHistoryEntry)
-      .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
-      .map(toListenInsert)
-      .filter((row): row is ListenInsert => row !== null)
+  const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
-    if (rows.length === 0) {
-      setStatus('No valid records found in file')
-      return
-    }
-
-    const { error } = await supabase.from('listens').insert(rows)
-    if (error) {
-      console.error(error)
-      setStatus('Error uploading data')
-    } else {
-      setStatus('Upload complete!')
-    }
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragging(false)
+    if (isBusy) return
+    handleFiles(event.dataTransfer.files)
   }
 
   return (
-    <Card className="p-6 max-w-md mx-auto mt-12 text-center">
-      <h1 className="text-xl font-semibold mb-4">Upload your Spotify Listening History</h1>
-      <input type="file" accept=".json" onChange={handleFile} className="mb-4" />
-      <Button onClick={() => document.querySelector('input')?.click()}>Choose File</Button>
-      <p className="mt-4 text-sm">{status}</p>
+    <div className="space-y-4">
+      <input
+        ref={inputRef}
+        id="spotify-upload"
+        type="file"
+        accept=".json,application/json"
+        className="sr-only"
+        onChange={(event) => handleFiles(event.target.files)}
+        disabled={isBusy}
+      />
+      <label htmlFor="spotify-upload" className="block">
+        <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              inputRef.current?.click()
+            }
+          }}
+          onClick={() => inputRef.current?.click()}
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+            isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40'
+          } ${isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary'}`}
+        >
+          <p className="text-sm font-medium">Drag and drop your Spotify JSON export here</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            or click to choose a file from your computer
+          </p>
+          {selectedFile ? (
+            <p className="mt-4 text-sm font-medium">
+              Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+            </p>
+          ) : null}
+        </div>
+      </label>
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={isBusy}
+        >
+          Choose File
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export default function UploadPage() {
+  const [status, setStatus] = useState<StatusState>({
+    state: 'idle',
+    message: 'Select a Spotify listening history JSON file to begin.',
+  })
+  const [progress, setProgress] = useState(0)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+
+  const resetState = (message: StatusState['message'], state: StatusState['state']) => {
+    setProgress(0)
+    setSelectedFile(null)
+    setStatus({ state, message })
+  }
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setSelectedFile(file)
+      setProgress(0)
+      setStatus({ state: 'validating', message: 'Validating file…' })
+
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        resetState('Only JSON files are supported.', 'error')
+        return
+      }
+
+      const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
+      if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
+        resetState('The selected file is not recognized as JSON.', 'error')
+        return
+      }
+
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        resetState('The file is too large. Please upload a file smaller than 5 MB.', 'error')
+        return
+      }
+
+      let text: string
+      try {
+        text = await file.text()
+      } catch (error) {
+        console.error(error)
+        resetState('Unable to read the file. Please try again.', 'error')
+        return
+      }
+
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(text)
+      } catch (error) {
+        console.error(error)
+        resetState('The file does not contain valid JSON.', 'error')
+        return
+      }
+
+      if (!Array.isArray(parsed)) {
+        resetState('Expected an array of listening records in the JSON file.', 'error')
+        return
+      }
+
+      const rows = parsed
+        .map(toSpotifyHistoryEntry)
+        .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
+        .map(toListenInsert)
+        .filter((row): row is ListenInsert => row !== null)
+
+      if (rows.length === 0) {
+        resetState('No valid listening records were found in the file.', 'error')
+        return
+      }
+
+      const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
+      if (!hasTimestamp) {
+        resetState('No timestamp information found in the uploaded file.', 'error')
+        return
+      }
+
+      setStatus({ state: 'uploading', message: 'Uploading data to Supabase…' })
+
+      for (let index = 0; index < rows.length; index += BATCH_SIZE) {
+        const batch = rows.slice(index, index + BATCH_SIZE)
+        const { error } = await supabase.from('listens').insert(batch)
+
+        if (error) {
+          console.error(error)
+          resetState(
+            'Supabase returned an error while uploading. Please try again.',
+            'error',
+          )
+          return
+        }
+
+        const uploadedCount = Math.min(index + batch.length, rows.length)
+        const percent = Math.round((uploadedCount / rows.length) * 100)
+        setProgress(percent)
+      }
+
+      setProgress(100)
+      setSelectedFile(null)
+      setStatus({
+        state: 'success',
+        message: `Successfully uploaded ${rows.length} listening records.`,
+      })
+    },
+    [],
+  )
+
+  return (
+    <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold">Upload your Spotify Listening History</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Drag in the JSON exports downloaded from Spotify to add them to Supabase.
+        </p>
+      </div>
+      <UploadDropzone
+        onFileAccepted={handleFile}
+        isBusy={status.state === 'validating' || status.state === 'uploading'}
+        selectedFile={selectedFile}
+      />
+      <div className="space-y-2">
+        {(status.state === 'uploading' || progress > 0) && (
+          <Progress value={progress} aria-live="polite" />
+        )}
+        <p
+          className={`text-sm ${
+            status.state === 'error'
+              ? 'text-destructive'
+              : status.state === 'success'
+              ? 'text-green-600'
+              : 'text-muted-foreground'
+          }`}
+          aria-live="polite"
+        >
+          {status.message}
+        </p>
+      </div>
     </Card>
   )
 }
