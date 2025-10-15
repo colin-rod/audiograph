@@ -27,6 +27,8 @@ The project ships with a Vitest + Testing Library setup tuned for the App Router
 - `npm run test:watch` &mdash; primary red/green feedback loop while you iterate on a feature.
 - `npm run test` &mdash; single run for pre-commit checks or CI.
 - `npm run test:coverage` &mdash; generates HTML, lcov, and text coverage reports in `coverage/`.
+- `npm run lint` &mdash; keep ESLint warnings from creeping in during implementation.
+- `npm run typecheck` &mdash; verify the TypeScript surface after each refactor.
 
 ### Writing Tests
 
@@ -40,7 +42,11 @@ The project ships with a Vitest + Testing Library setup tuned for the App Router
 2. Add or update a spec that captures the desired behaviour (go red).
 3. Implement the minimal code to satisfy the test (go green).
 4. Refactor with confidence, keeping the watch run green.
-5. Finish with `npm run test` (and optionally `npm run test:coverage`) before raising a PR.
+5. Finish with `npm run lint`, `npm run typecheck`, and `npm run test` (plus `npm run test:coverage` when you want detailed metrics) before raising a PR.
+
+## Continuous Integration
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on pushes to `main` and every pull request. The job installs dependencies with `npm ci` and executes linting, static type checks, and the Vitest unit suite to guard the TDD pipeline in CI.
 
 ## Learn More
 
