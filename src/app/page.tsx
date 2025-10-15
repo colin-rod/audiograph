@@ -236,7 +236,7 @@ export default function UploadPage() {
 
   const handleReset = useCallback(async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to delete all uploaded listening data from Supabase? This action cannot be undone.',
+      'Are you sure you want to delete all uploaded listens? This action cannot be undone.',
     )
 
     if (!confirmed) {
@@ -245,7 +245,10 @@ export default function UploadPage() {
 
     setProgress(0)
     setSelectedFile(null)
-    setStatus({ state: 'resetting', message: 'Resetting uploaded listening data…' })
+    setStatus({
+      state: 'resetting',
+      message: 'Deleting existing listens from Supabase…',
+    })
 
     try {
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
@@ -254,20 +257,21 @@ export default function UploadPage() {
         console.error(error)
         setStatus({
           state: 'error',
-          message: `Supabase returned an error while resetting data: ${error.message}`,
+          message: 'Supabase returned an error while deleting. Please try again.',
         })
         return
       }
 
       setStatus({
         state: 'success',
-        message: 'Successfully reset uploaded listening data.',
+        message: 'All uploaded listens have been deleted.',
       })
     } catch (error) {
       console.error(error)
       setStatus({
         state: 'error',
-        message: 'An unexpected error occurred while deleting data. Please try again.',
+        message:
+          'An unexpected error occurred while deleting data. Please try again.',
       })
     }
   }, [])
