@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { SidebarNav, sidebarNavItems } from "@/components/dashboard/sidebar-nav"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 type DashboardLayoutProps = {
   children: ReactNode
@@ -32,7 +33,11 @@ const headerContent = (
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <DashboardShell sidebar={sidebarContent} header={headerContent}>
+    <DashboardShell
+      sidebar={sidebarContent}
+      header={headerContent}
+      headerActions={<ThemeToggle />}
+    >
       {children}
     </DashboardShell>
   )
