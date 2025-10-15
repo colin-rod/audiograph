@@ -20,6 +20,28 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Testing & TDD Workflow
+
+The project ships with a Vitest + Testing Library setup tuned for the App Router and the local `@` alias.
+
+- `npm run test:watch` &mdash; primary red/green feedback loop while you iterate on a feature.
+- `npm run test` &mdash; single run for pre-commit checks or CI.
+- `npm run test:coverage` &mdash; generates HTML, lcov, and text coverage reports in `coverage/`.
+
+### Writing Tests
+
+- colocate tests next to the code under `src/` using the `.test.tsx`/`.test.ts` suffix (e.g. `src/components/ui/button.test.tsx`).
+- Use JSX freely in tests; the config enables the automatic React transform and a jsdom environment.
+- Shared test utilities and global setup belong in `src/test/`. `src/test/setupTests.ts` currently wires up `@testing-library/jest-dom`.
+
+### Recommended Cycle
+
+1. Start `npm run test:watch`.
+2. Add or update a spec that captures the desired behaviour (go red).
+3. Implement the minimal code to satisfy the test (go green).
+4. Refactor with confidence, keeping the watch run green.
+5. Finish with `npm run test` (and optionally `npm run test:coverage`) before raising a PR.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
