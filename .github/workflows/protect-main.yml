@@ -1,0 +1,18 @@
+name: Protect Main Branch
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  block-direct-push:
+    name: Enforce PR merges only
+    runs-on: ubuntu-latest
+    if: github.event.pusher.name != 'web-flow' && github.event.pusher.name != 'github-actions[bot]'
+    steps:
+      - name: Fail run
+        run: |
+          echo "Direct pushes to main are disabled. Open a pull request instead."
+          exit 1
