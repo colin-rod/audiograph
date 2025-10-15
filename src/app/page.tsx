@@ -296,9 +296,7 @@ export default function UploadPage() {
 
       for (let index = 0; index < rows.length; index += BATCH_SIZE) {
         const batch = rows.slice(index, index + BATCH_SIZE)
-        const { error } = await supabase
-          .from('listens')
-          .insert(batch, { returning: 'minimal' })
+        const { error } = await supabase.from('listens').insert(batch)
 
         if (error) {
           console.error(error)
