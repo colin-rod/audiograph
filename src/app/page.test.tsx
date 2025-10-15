@@ -1,0 +1,98 @@
+import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import UploadPage from "./page"
+
+const { notMock, deleteMock, fromMock } = vi.hoisted(() => {
+  const localNotMock = vi.fn()
+  const localDeleteMock = vi.fn(() => ({ not: localNotMock }))
+  const localFromMock = vi.fn(() => ({ delete: localDeleteMock }))
+
+  return {
+    notMock: localNotMock,
+    deleteMock: localDeleteMock,
+    fromMock: localFromMock,
+  }
+})
+
+vi.mock("@/lib/supabaseClient", () => ({
+  supabase: {
+    from: fromMock,
+  },
+}))
+
+describe("UploadPage reset controls", () => {
+  beforeEach(() => {
+    fromMock.mockClear()
+    deleteMock.mockClear()
+    notMock.mockClear()
+    notMock.mockResolvedValue({ error: null })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("confirms with the user and deletes listens on approval", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
+    const user = userEvent.setup()
+
+    render(<UploadPage />)
+
+    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
+    await user.click(resetButton)
+
+    await waitFor(() => expect(fromMock).toHaveBeenCalledWith("listens"))
+    expect(deleteMock).toHaveBeenCalled()
+    expect(notMock).toHaveBeenCalledWith("ts", "is", null)
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("All uploaded listens have been deleted.")
+      ).toBeInTheDocument()
+    )
+
+    confirmSpy.mockRestore()
+  })
+
+  it("does not call Supabase when the user cancels", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false)
+    const user = userEvent.setup()
+
+    render(<UploadPage />)
+
+    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
+    await user.click(resetButton)
+
+    expect(fromMock).not.toHaveBeenCalled()
+    expect(deleteMock).not.toHaveBeenCalled()
+    expect(notMock).not.toHaveBeenCalled()
+    expect(
+      screen.getByText("Select a Spotify listening history JSON file to begin.")
+    ).toBeInTheDocument()
+
+    confirmSpy.mockRestore()
+  })
+
+  it("surfaces Supabase errors to the user", async () => {
+    notMock.mockResolvedValueOnce({ error: { message: "failure" } })
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
+    const user = userEvent.setup()
+
+    render(<UploadPage />)
+
+    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
+    await user.click(resetButton)
+
+    await waitFor(() => expect(notMock).toHaveBeenCalled())
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Supabase returned an error while deleting. Please try again.")
+      ).toBeInTheDocument()
+    )
+
+    confirmSpy.mockRestore()
+  })
+})
