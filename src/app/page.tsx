@@ -100,13 +100,7 @@ const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
 }
 
 type StatusState = {
-  state:
-    | 'idle'
-    | 'validating'
-    | 'uploading'
-    | 'resetting'
-    | 'success'
-    | 'error'
+  state: 'idle' | 'validating' | 'uploading' | 'resetting' | 'success' | 'error'
   message: string
 }
 
@@ -239,6 +233,36 @@ export default function UploadPage() {
     setSelectedFile(null)
     setStatus({ state, message })
   }
+
+  const handleReset = useCallback(async () => {
+    const shouldReset = window.confirm(
+      'Are you sure you want to delete all uploaded listening data from Supabase? This action cannot be undone.',
+    )
+
+    if (!shouldReset) {
+      return
+    }
+
+    setProgress(0)
+    setSelectedFile(null)
+    setStatus({ state: 'resetting', message: 'Resetting uploaded listening data…' })
+
+    const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
+
+    if (error) {
+      console.error(error)
+      setStatus({
+        state: 'error',
+        message: `Supabase returned an error while resetting data: ${error.message}`,
+      })
+      return
+    }
+
+    setStatus({
+      state: 'success',
+      message: 'Successfully reset uploaded listening data.',
+    })
+  }, [])
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -397,15 +421,24 @@ export default function UploadPage() {
       </div>
       <UploadDropzone
         onFileAccepted={handleFile}
-        isBusy={isBusy}
+        isBusy={
+          status.state === 'validating' ||
+          status.state === 'uploading' ||
+          status.state === 'resetting'
+        }
         selectedFile={selectedFile}
       />
       <div className="flex justify-center">
         <Button
           type="button"
-          variant="destructive"
+          variant="outline"
           onClick={handleReset}
-          disabled={isBusy}
+          disabled={
+            status.state === 'validating' ||
+            status.state === 'uploading' ||
+            status.state === 'resetting'
+          }
+          aria-label="Reset uploaded data"
         >
           Reset uploaded data
         </Button>

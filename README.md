@@ -48,6 +48,10 @@ The project ships with a Vitest + Testing Library setup tuned for the App Router
 
 A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on pushes to `main` and every pull request. The job installs dependencies with `npm ci` and executes linting, static type checks, and the Vitest unit suite to guard the TDD pipeline in CI.
 
+## Branching Workflow
+
+Direct pushes to `main` are blocked by `.github/workflows/protect-main.yml`. Develop features on dedicated branches, push them, and open a pull request for review. For full enforcement (required reviews, status checks, linear history), add matching branch protection rules in the repository settings.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
