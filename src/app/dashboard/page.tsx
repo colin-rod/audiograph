@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   DashboardSummary,
@@ -12,6 +12,14 @@ import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { supabase } from "@/lib/supabaseClient"
+
+import {
+  TimeframeFilter,
+  type TimeframeMonthOption,
+  type TimeframeOption,
+  type TimeframeValue,
+  type TimeframeYearOption,
+} from "@/components/dashboard/timeframe-filter"
 
 type ListenSummaryRow = {
   ms_played: number | null
@@ -253,8 +261,17 @@ const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => (
   listeningClock: calculateListeningClock(listens),
 })
 
+const ALL_TIME_OPTION: TimeframeOption = {
+  type: "all",
+  value: "all",
+  label: "All time",
+}
+
 export default function DashboardPage() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [listens, setListens] = useState<ListenSummaryRow[] | null>(null)
+  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
+    ALL_TIME_OPTION.value
+  )
 
   useEffect(() => {
     let active = true
@@ -271,11 +288,11 @@ export default function DashboardPage() {
 
       if (!active) return
 
-      const listens = (data ?? [])
+      const fetchedListens = (data ?? [])
         .map(toListenSummaryRow)
         .filter((row): row is ListenSummaryRow => row !== null)
 
-      setDashboardData(calculateDashboardData(listens))
+      setListens(fetchedListens)
     }
 
     void fetchData()
@@ -285,14 +302,120 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const timeframeOptions = useMemo<TimeframeOption[]>(() => {
+    if (!listens || listens.length === 0) {
+      return [ALL_TIME_OPTION]
+    }
+
+    const yearSet = new Set<number>()
+    const monthSet = new Set<string>()
+
+    listens.forEach((listen) => {
+      if (!listen.ts) return
+      const tsDate = new Date(listen.ts)
+      if (Number.isNaN(tsDate.getTime())) return
+      const year = tsDate.getUTCFullYear()
+      yearSet.add(year)
+      const month = tsDate.getUTCMonth() + 1
+      monthSet.add(`${year}-${String(month).padStart(2, "0")}`)
+    })
+
+    const yearOptions: TimeframeYearOption[] = Array.from(yearSet)
+      .sort((a, b) => b - a)
+      .map((year) => ({
+        type: "year",
+        value: `year-${year}` as const,
+        label: year.toString(),
+        year,
+      }))
+
+    const monthOptions: TimeframeMonthOption[] = Array.from(monthSet)
+      .sort((a, b) => b.localeCompare(a))
+      .map((key) => {
+        const [yearStr, monthStr] = key.split("-")
+        const year = Number(yearStr)
+        const month = Number(monthStr)
+        const date = new Date(Date.UTC(year, month - 1, 1))
+        return {
+          type: "month" as const,
+          value: `month-${year}-${monthStr}` as const,
+          label: MONTH_LABEL_FORMATTER.format(date),
+          year,
+          month,
+        }
+      })
+
+    return [ALL_TIME_OPTION, ...yearOptions, ...monthOptions]
+  }, [listens])
+
+  useEffect(() => {
+    if (!timeframeOptions.some((option) => option.value === selectedTimeframe)) {
+      setSelectedTimeframe(ALL_TIME_OPTION.value)
+    }
+  }, [timeframeOptions, selectedTimeframe])
+
+  const activeTimeframe = useMemo(
+    () => timeframeOptions.find((option) => option.value === selectedTimeframe),
+    [selectedTimeframe, timeframeOptions]
+  )
+
+  const filteredListens = useMemo(() => {
+    if (!listens) {
+      return null
+    }
+
+    if (!activeTimeframe || activeTimeframe.type === "all") {
+      return listens
+    }
+
+    return listens.filter((listen) => {
+      if (!listen.ts) {
+        return false
+      }
+
+      const tsDate = new Date(listen.ts)
+      if (Number.isNaN(tsDate.getTime())) {
+        return false
+      }
+
+      const year = tsDate.getUTCFullYear()
+
+      if (activeTimeframe.type === "year") {
+        return year === activeTimeframe.year
+      }
+
+      const month = tsDate.getUTCMonth() + 1
+      return (
+        activeTimeframe.type === "month" &&
+        year === activeTimeframe.year &&
+        month === activeTimeframe.month
+      )
+    })
+  }, [activeTimeframe, listens])
+
+  const dashboardData = useMemo(() => {
+    if (!filteredListens) {
+      return null
+    }
+
+    return calculateDashboardData(filteredListens)
+  }, [filteredListens])
+
   return (
     <div className="flex flex-col gap-10">
-      <section className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Your listening summary</h1>
-        <p className="text-muted-foreground">
-          See how many hours you have tuned in, the artists you keep coming back
-          to, and the tracks that defined your listening sessions.
-        </p>
+      <section className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Your listening summary</h1>
+          <p className="text-muted-foreground">
+            See how many hours you have tuned in, the artists you keep coming
+            back to, and the tracks that defined your listening sessions.
+          </p>
+        </div>
+        <TimeframeFilter
+          options={timeframeOptions}
+          value={selectedTimeframe}
+          onValueChange={setSelectedTimeframe}
+        />
       </section>
       {dashboardData ? (
         <DashboardSummary stats={dashboardData.summary} />

@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react"
 
 import { render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 type ListenRow = {
@@ -57,6 +58,12 @@ vi.mock("@/lib/supabaseClient", () => ({
 
 import DashboardLayout from "./layout"
 import DashboardPage from "./page"
+
+const getCardQueries = (summary: HTMLElement, label: string) => {
+  const card = within(summary).getByText(label).closest("[data-slot='card']")
+  expect(card).not.toBeNull()
+  return card ? within(card as HTMLElement) : null
+}
 
 describe("Dashboard page", () => {
   beforeEach(() => {
@@ -176,16 +183,8 @@ describe("Dashboard page", () => {
       screen.queryByTestId("listening-clock-heatmap-skeleton")
     ).not.toBeInTheDocument()
 
-    const getCardValue = (label: string) => {
-      const card = within(summary)
-        .getByText(label)
-        .closest("[data-slot='card']")
-      expect(card).not.toBeNull()
-      return card ? within(card as HTMLElement) : null
-    }
-
     const expectCardValue = (label: string, value: string) => {
-      const cardQueries = getCardValue(label)
+      const cardQueries = getCardQueries(summary, label)
       if (!cardQueries) {
         throw new Error(`Card with label "${label}" was not found`)
       }
@@ -211,8 +210,8 @@ describe("Dashboard page", () => {
     expect(
       screen.getByRole("heading", { name: /listening trends/i })
     ).toBeInTheDocument()
-    expect(screen.getByText(/Jan\s*2024/)).toBeInTheDocument()
-    expect(screen.getByText(/Dec\s*2023/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Jan\s*2024/)).not.toHaveLength(0)
+    expect(screen.getAllByText(/Dec\s*2023/)).not.toHaveLength(0)
 
     expect(
       screen.getByRole("heading", { name: /listening clock/i })
@@ -223,5 +222,84 @@ describe("Dashboard page", () => {
     expect(
       screen.getByLabelText(/Saturday at 22:00 — 0.5 hrs/i)
     ).toBeInTheDocument()
+  })
+
+  it("filters dashboard metrics when timeframe changes", async () => {
+    selectMock.mockResolvedValueOnce({
+      data: [
+        {
+          ms_played: 4_500_000,
+          artist: "Artist 2023",
+          track: "Track 2023",
+          ts: "2023-11-05T12:00:00.000Z",
+        },
+        {
+          ms_played: 2_400_000,
+          artist: "Artist Jan",
+          track: "Track Jan",
+          ts: "2024-01-10T09:00:00.000Z",
+        },
+        {
+          ms_played: 1_800_000,
+          artist: "Artist Jan",
+          track: "Track Jan",
+          ts: "2024-01-15T11:30:00.000Z",
+        },
+        {
+          ms_played: 1_200_000,
+          artist: "Artist Feb",
+          track: "Track Feb",
+          ts: "2024-02-02T20:00:00.000Z",
+        },
+      ],
+      error: null,
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <DashboardLayout>
+        <DashboardPage />
+      </DashboardLayout>
+    )
+
+    const summary = await screen.findByTestId("dashboard-summary")
+    const timeframeButton = screen.getByRole("button", {
+      name: /select timeframe/i,
+    })
+
+    await waitFor(() => {
+      expect(timeframeButton).toBeEnabled()
+    })
+
+    expect(timeframeButton).toHaveTextContent(/All time/i)
+
+    const topArtistCard = getCardQueries(summary, "Top artist")
+    expect(topArtistCard?.getByText("Artist 2023")).toBeInTheDocument()
+
+    await user.click(timeframeButton)
+
+    const januaryOption = await screen.findByRole("menuitemradio", {
+      name: "Jan 2024",
+    })
+    await user.click(januaryOption)
+
+    await waitFor(() => {
+      const cardQueries = getCardQueries(summary, "Top artist")
+      expect(cardQueries?.getByText("Artist Jan")).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(timeframeButton).toHaveTextContent(/Jan 2024/i)
+    })
+
+    const mostActiveYearCard = getCardQueries(summary, "Most active year")
+    expect(mostActiveYearCard?.getByText("2024")).toBeInTheDocument()
+
+    const tracksTable = screen.getByRole("table", {
+      name: /ordered by total listening hours/i,
+    })
+    expect(within(tracksTable).getByText("Track Jan")).toBeInTheDocument()
+    expect(within(tracksTable).queryByText("Track 2023")).not.toBeInTheDocument()
   })
 })
