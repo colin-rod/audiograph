@@ -7,6 +7,10 @@ import {
   DashboardSummarySkeleton,
   type DashboardStats,
 } from "@/components/dashboard/dashboard-summary"
+import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
+import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
+import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
+import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { supabase } from "@/lib/supabaseClient"
 
 type ListenSummaryRow = {
@@ -47,12 +51,14 @@ const toListenSummaryRow = (value: unknown): ListenSummaryRow | null => {
   return { ms_played: msPlayed, artist, track, ts }
 }
 
+const MS_PER_HOUR = 1000 * 60 * 60
+
 const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats => {
   const totalMs = listens.reduce(
     (acc, listen) => acc + (listen.ms_played ?? 0),
     0
   )
-  const totalHours = (totalMs / (1000 * 60 * 60)).toFixed(1)
+  const totalHours = (totalMs / MS_PER_HOUR).toFixed(1)
   const artists = new Set(
     listens.map((listen) => listen.artist).filter(Boolean)
   ).size
@@ -108,8 +114,147 @@ const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats =>
   }
 }
 
+const calculateTopArtists = (listens: ListenSummaryRow[]) => {
+  const artistTotals = new Map<string, number>()
+
+  listens.forEach((listen) => {
+    if (!listen.artist) return
+    const msPlayed = listen.ms_played ?? 0
+    artistTotals.set(listen.artist, (artistTotals.get(listen.artist) ?? 0) + msPlayed)
+  })
+
+  return Array.from(artistTotals.entries())
+    .map(([name, ms]) => ({
+      name,
+      hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+    }))
+    .sort((a, b) => {
+      if (b.hours === a.hours) {
+        return a.name.localeCompare(b.name)
+      }
+      return b.hours - a.hours
+    })
+    .slice(0, 5)
+}
+
+const calculateTopTracks = (listens: ListenSummaryRow[]) => {
+  type TrackKey = {
+    track: string
+    artist: string | null
+  }
+
+  const trackTotals = new Map<string, { info: TrackKey; ms: number }>()
+
+  listens.forEach((listen) => {
+    if (!listen.track) return
+    const msPlayed = listen.ms_played ?? 0
+    const key = `${listen.track}__${listen.artist ?? ""}`
+    const entry = trackTotals.get(key) ?? {
+      info: { track: listen.track, artist: listen.artist ?? null },
+      ms: 0,
+    }
+    entry.ms += msPlayed
+    trackTotals.set(key, entry)
+  })
+
+  return Array.from(trackTotals.values())
+    .map(({ info, ms }) => ({
+      track: info.track,
+      artist: info.artist,
+      hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+    }))
+    .sort((a, b) => {
+      if (b.hours === a.hours) {
+        return a.track.localeCompare(b.track)
+      }
+      return b.hours - a.hours
+    })
+    .slice(0, 5)
+}
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+})
+
+const calculateListeningTrends = (listens: ListenSummaryRow[]) => {
+  const monthlyTotals = new Map<string, number>()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const year = tsDate.getUTCFullYear()
+    const month = tsDate.getUTCMonth() + 1
+    const key = `${year}-${String(month).padStart(2, "0")}`
+    const msPlayed = listen.ms_played ?? 0
+    monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + msPlayed)
+  })
+
+  return Array.from(monthlyTotals.entries())
+    .map(([month, ms]) => {
+      const [yearStr, monthStr] = month.split("-")
+      const year = Number(yearStr)
+      const monthIndex = Number(monthStr) - 1
+      const date = new Date(Date.UTC(year, monthIndex, 1))
+      return {
+        month,
+        label: MONTH_LABEL_FORMATTER.format(date),
+        hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+      }
+    })
+    .sort((a, b) => a.month.localeCompare(b.month))
+}
+
+const calculateListeningClock = (listens: ListenSummaryRow[]) => {
+  const slotTotals = new Map<string, number>()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const day = tsDate.getUTCDay()
+    const hour = tsDate.getUTCHours()
+    const key = `${day}-${hour}`
+    const msPlayed = listen.ms_played ?? 0
+    slotTotals.set(key, (slotTotals.get(key) ?? 0) + msPlayed)
+  })
+
+  return Array.from(slotTotals.entries())
+    .map(([slot, ms]) => {
+      const [dayStr, hourStr] = slot.split("-")
+      return {
+        day: Number(dayStr),
+        hour: Number(hourStr),
+        hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+      }
+    })
+    .sort((a, b) => {
+      if (a.day === b.day) {
+        return a.hour - b.hour
+      }
+      return a.day - b.day
+    })
+}
+
+type DashboardData = {
+  summary: DashboardStats
+  topArtists: ReturnType<typeof calculateTopArtists>
+  topTracks: ReturnType<typeof calculateTopTracks>
+  listeningTrends: ReturnType<typeof calculateListeningTrends>
+  listeningClock: ReturnType<typeof calculateListeningClock>
+}
+
+const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => ({
+  summary: calculateDashboardStats(listens),
+  topArtists: calculateTopArtists(listens),
+  topTracks: calculateTopTracks(listens),
+  listeningTrends: calculateListeningTrends(listens),
+  listeningClock: calculateListeningClock(listens),
+})
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
 
   useEffect(() => {
     let active = true
@@ -130,7 +275,7 @@ export default function DashboardPage() {
         .map(toListenSummaryRow)
         .filter((row): row is ListenSummaryRow => row !== null)
 
-      setStats(calculateDashboardStats(listens))
+      setDashboardData(calculateDashboardData(listens))
     }
 
     void fetchData()
@@ -149,7 +294,41 @@ export default function DashboardPage() {
           to, and the tracks that defined your listening sessions.
         </p>
       </section>
-      {stats ? <DashboardSummary stats={stats} /> : <DashboardSummarySkeleton />}
+      {dashboardData ? (
+        <DashboardSummary stats={dashboardData.summary} />
+      ) : (
+        <DashboardSummarySkeleton />
+      )}
+      <section
+        aria-label="Artist and track insights"
+        className="grid gap-6 lg:grid-cols-2"
+      >
+        {dashboardData ? (
+          <TopArtistsChart data={dashboardData.topArtists} />
+        ) : (
+          <TopArtistsChartSkeleton />
+        )}
+        {dashboardData ? (
+          <TopTracksTable data={dashboardData.topTracks} />
+        ) : (
+          <TopTracksTableSkeleton />
+        )}
+      </section>
+      <section
+        aria-label="Listening trends and clock"
+        className="grid gap-6 lg:grid-cols-2"
+      >
+        {dashboardData ? (
+          <ListeningTrendsChart data={dashboardData.listeningTrends} />
+        ) : (
+          <ListeningTrendsChartSkeleton />
+        )}
+        {dashboardData ? (
+          <ListeningClockHeatmap data={dashboardData.listeningClock} />
+        ) : (
+          <ListeningClockHeatmapSkeleton />
+        )}
+      </section>
     </div>
   )
 }
