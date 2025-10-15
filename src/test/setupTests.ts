@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest"
+import { vi } from "vitest"
 
 class ResizeObserverStub implements ResizeObserver {
   private callback: ResizeObserverCallback
@@ -44,4 +45,20 @@ class ResizeObserverStub implements ResizeObserver {
 if (!globalThis.ResizeObserver) {
   ;(globalThis as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
     ResizeObserverStub
+}
+
+if (!window.matchMedia) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }),
+  })
 }
