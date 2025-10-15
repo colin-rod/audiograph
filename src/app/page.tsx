@@ -223,11 +223,6 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
-  const isBusy =
-    status.state === 'validating' ||
-    status.state === 'uploading' ||
-    status.state === 'resetting'
-
   const resetState = (message: StatusState['message'], state: StatusState['state']) => {
     setProgress(0)
     setSelectedFile(null)
