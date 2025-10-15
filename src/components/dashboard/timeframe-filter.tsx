@@ -70,7 +70,10 @@ function TimeframeFilter({ options, value, onValueChange }: TimeframeFilterProps
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuLabel>Timeframe</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(nextValue) => onValueChange(nextValue as TimeframeValue)}
+        >
           {options.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>
               {option.label}
