@@ -7,6 +7,7 @@ type ListenRow = {
   ms_played: number | null
   artist: string | null
   track: string | null
+  ts: string | null
 }
 
 type SupabaseSelectResult = {
@@ -100,8 +101,18 @@ describe("Dashboard page", () => {
   it("replaces the skeleton with stats once data resolves", async () => {
     selectMock.mockResolvedValueOnce({
       data: [
-        { ms_played: 1_800_000, artist: "Artist A", track: "Track 1" },
-        { ms_played: 3_600_000, artist: "Artist B", track: "Track 2" },
+        {
+          ms_played: 1_800_000,
+          artist: "Artist A",
+          track: "Track 1",
+          ts: "2024-01-01T00:00:00.000Z",
+        },
+        {
+          ms_played: 3_600_000,
+          artist: "Artist B",
+          track: "Track 2",
+          ts: "2023-06-15T00:00:00.000Z",
+        },
       ],
       error: null,
     })
@@ -123,30 +134,26 @@ describe("Dashboard page", () => {
       screen.queryByTestId("dashboard-summary-skeleton")
     ).not.toBeInTheDocument()
 
-    const hoursCard = within(summary)
-      .getByText("Hours listened")
-      .closest("[data-slot='card']")
-    const artistsCard = within(summary)
-      .getByText("Artists")
-      .closest("[data-slot='card']")
-    const tracksCard = within(summary)
-      .getByText("Tracks")
-      .closest("[data-slot='card']")
-
-    expect(hoursCard).not.toBeNull()
-    expect(artistsCard).not.toBeNull()
-    expect(tracksCard).not.toBeNull()
-
-    if (hoursCard) {
-      expect(within(hoursCard as HTMLElement).getByText("1.5")).toBeInTheDocument()
+    const getCardValue = (label: string) => {
+      const card = within(summary)
+        .getByText(label)
+        .closest("[data-slot='card']")
+      expect(card).not.toBeNull()
+      return card ? within(card as HTMLElement) : null
     }
 
-    if (artistsCard) {
-      expect(within(artistsCard as HTMLElement).getByText("2")).toBeInTheDocument()
+    const expectCardValue = (label: string, value: string) => {
+      const cardQueries = getCardValue(label)
+      if (!cardQueries) {
+        throw new Error(`Card with label "${label}" was not found`)
+      }
+      expect(cardQueries.getByText(value)).toBeInTheDocument()
     }
 
-    if (tracksCard) {
-      expect(within(tracksCard as HTMLElement).getByText("2")).toBeInTheDocument()
-    }
+    expectCardValue("Hours listened", "1.5")
+    expectCardValue("Artists", "2")
+    expectCardValue("Tracks", "2")
+    expectCardValue("Top artist", "Artist B")
+    expectCardValue("Most active year", "2023")
   })
 })

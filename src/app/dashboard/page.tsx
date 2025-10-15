@@ -13,6 +13,7 @@ type ListenSummaryRow = {
   ms_played: number | null
   artist: string | null
   track: string | null
+  ts: string | null
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -35,8 +36,15 @@ const toListenSummaryRow = (value: unknown): ListenSummaryRow | null => {
     typeof value["track"] === "string"
       ? (value["track"] as string)
       : null
+  const rawTs = value["ts"]
+  const ts =
+    typeof rawTs === "string"
+      ? rawTs
+      : rawTs instanceof Date && !Number.isNaN(rawTs.getTime())
+        ? rawTs.toISOString()
+        : null
 
-  return { ms_played: msPlayed, artist, track }
+  return { ms_played: msPlayed, artist, track, ts }
 }
 
 const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats => {
@@ -51,8 +59,53 @@ const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats =>
   const tracks = new Set(
     listens.map((listen) => listen.track).filter(Boolean)
   ).size
+  const artistPlaytime = new Map<string, number>()
+  const yearlyPlaytime = new Map<string, number>()
 
-  return { totalHours, artists, tracks }
+  listens.forEach((listen) => {
+    const msPlayed = listen.ms_played ?? 0
+
+    if (listen.artist) {
+      artistPlaytime.set(
+        listen.artist,
+        (artistPlaytime.get(listen.artist) ?? 0) + msPlayed
+      )
+    }
+
+    if (listen.ts) {
+      const tsDate = new Date(listen.ts)
+      if (!Number.isNaN(tsDate.getTime())) {
+        const year = tsDate.getUTCFullYear().toString()
+        yearlyPlaytime.set(year, (yearlyPlaytime.get(year) ?? 0) + msPlayed)
+      }
+    }
+  })
+
+  const topArtistEntry = Array.from(artistPlaytime.entries()).sort(
+    ([artistA, msA], [artistB, msB]) => {
+      if (msA === msB) {
+        return artistA.localeCompare(artistB)
+      }
+      return msB - msA
+    }
+  )[0]
+
+  const mostActiveYearEntry = Array.from(yearlyPlaytime.entries()).sort(
+    ([yearA, msA], [yearB, msB]) => {
+      if (msA === msB) {
+        return yearA.localeCompare(yearB)
+      }
+      return msB - msA
+    }
+  )[0]
+
+  return {
+    totalHours,
+    artists,
+    tracks,
+    topArtist: topArtistEntry?.[0] ?? null,
+    mostActiveYear: mostActiveYearEntry?.[0] ?? null,
+  }
 }
 
 export default function DashboardPage() {
@@ -64,7 +117,7 @@ export default function DashboardPage() {
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("listens")
-        .select("ms_played, artist, track")
+        .select("ms_played, artist, track, ts")
 
       if (error) {
         console.error(error)
