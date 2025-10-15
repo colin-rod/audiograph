@@ -23,6 +23,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
+      "next-themes": resolve(__dirname, "./src/lib/next-themes"),
     },
   },
 })

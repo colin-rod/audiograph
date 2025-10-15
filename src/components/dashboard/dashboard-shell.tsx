@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 type DashboardShellProps = {
   sidebar?: React.ReactNode
   header?: React.ReactNode
+  headerActions?: React.ReactNode
   children: React.ReactNode
   className?: string
   mainClassName?: string
@@ -13,6 +14,7 @@ type DashboardShellProps = {
 function DashboardShell({
   sidebar,
   header,
+  headerActions,
   children,
   className,
   mainClassName,
@@ -32,9 +34,18 @@ function DashboardShell({
         <div className="flex h-full flex-col gap-6 p-6">{sidebar}</div>
       </aside>
       <div className="flex flex-1 flex-col">
-        {header ? (
+        {header || headerActions ? (
           <header className="border-b border-border bg-background px-6 py-6">
-            <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">{header}</div>
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                {header ? (
+                  <div className="min-w-0 flex-1">{header}</div>
+                ) : null}
+                {headerActions ? (
+                  <div className="flex shrink-0 items-center gap-2">{headerActions}</div>
+                ) : null}
+              </div>
+            </div>
           </header>
         ) : null}
         <main

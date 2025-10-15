@@ -58,6 +58,7 @@ vi.mock("@/lib/supabaseClient", () => ({
 
 import DashboardLayout from "./layout"
 import DashboardPage from "./page"
+import { ThemeProvider } from "@/components/providers/theme-provider"
 
 const getCardQueries = (summary: HTMLElement, label: string) => {
   const card = within(summary).getByText(label).closest("[data-slot='card']")
@@ -80,9 +81,11 @@ describe("Dashboard page", () => {
     selectMock.mockResolvedValueOnce({ data: [], error: null })
 
     render(
-      <DashboardLayout>
-        <DashboardPage />
-      </DashboardLayout>
+      <ThemeProvider>
+        <DashboardLayout>
+          <DashboardPage />
+        </DashboardLayout>
+      </ThemeProvider>
     )
 
     expect(
@@ -91,6 +94,10 @@ describe("Dashboard page", () => {
 
     const overviewLink = screen.getByRole("link", { name: "Overview" })
     expect(overviewLink).toHaveAttribute("aria-current", "page")
+
+    expect(
+      screen.getByRole("button", { name: /switch to dark theme/i })
+    ).toBeInTheDocument()
 
     expect(
       screen.getByTestId("dashboard-summary-skeleton")
@@ -155,9 +162,11 @@ describe("Dashboard page", () => {
     })
 
     render(
-      <DashboardLayout>
-        <DashboardPage />
-      </DashboardLayout>
+      <ThemeProvider>
+        <DashboardLayout>
+          <DashboardPage />
+        </DashboardLayout>
+      </ThemeProvider>
     )
 
     expect(
@@ -258,9 +267,11 @@ describe("Dashboard page", () => {
     const user = userEvent.setup()
 
     render(
-      <DashboardLayout>
-        <DashboardPage />
-      </DashboardLayout>
+      <ThemeProvider>
+        <DashboardLayout>
+          <DashboardPage />
+        </DashboardLayout>
+      </ThemeProvider>
     )
 
     const summary = await screen.findByTestId("dashboard-summary")
