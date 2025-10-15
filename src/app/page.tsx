@@ -269,11 +269,26 @@ export default function UploadPage() {
         return
       }
 
-      const rows = parsed
+      const parsedRows = parsed
         .map(toSpotifyHistoryEntry)
         .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
         .map(toListenInsert)
         .filter((row): row is ListenInsert => row !== null)
+
+      const uniqueRows = new Map<string, ListenInsert>()
+      for (const row of parsedRows) {
+        const key = [
+          row.ts.toISOString(),
+          row.track ?? '',
+          row.artist ?? '',
+          row.ms_played === null ? '' : row.ms_played.toString(),
+        ].join('|')
+        if (!uniqueRows.has(key)) {
+          uniqueRows.set(key, row)
+        }
+      }
+
+      const rows = Array.from(uniqueRows.values())
 
       if (rows.length === 0) {
         resetState('No valid listening records were found in the file.', 'error')
