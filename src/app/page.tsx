@@ -100,7 +100,13 @@ const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
 }
 
 type StatusState = {
-  state: 'idle' | 'validating' | 'uploading' | 'success' | 'error'
+  state:
+    | 'idle'
+    | 'validating'
+    | 'uploading'
+    | 'resetting'
+    | 'success'
+    | 'error'
   message: string
 }
 
@@ -223,6 +229,11 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
+  const isBusy =
+    status.state === 'validating' ||
+    status.state === 'uploading' ||
+    status.state === 'resetting'
+
   const resetState = (message: StatusState['message'], state: StatusState['state']) => {
     setProgress(0)
     setSelectedFile(null)
@@ -331,6 +342,51 @@ export default function UploadPage() {
     [],
   )
 
+  const handleReset = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete all uploaded listens? This action cannot be undone.',
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setStatus({
+      state: 'resetting',
+      message: 'Deleting existing listens from Supabase…',
+    })
+    setProgress(0)
+    setSelectedFile(null)
+
+    try {
+      const { error } = await supabase
+        .from('listens')
+        .delete()
+        .not('ts', 'is', null)
+
+      if (error) {
+        console.error(error)
+        setStatus({
+          state: 'error',
+          message: 'Supabase returned an error while deleting. Please try again.',
+        })
+        return
+      }
+
+      setStatus({
+        state: 'success',
+        message: 'All uploaded listens have been deleted.',
+      })
+    } catch (error) {
+      console.error(error)
+      setStatus({
+        state: 'error',
+        message:
+          'An unexpected error occurred while deleting data. Please try again.',
+      })
+    }
+  }, [])
+
   return (
     <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
       <div className="text-center">
@@ -341,9 +397,19 @@ export default function UploadPage() {
       </div>
       <UploadDropzone
         onFileAccepted={handleFile}
-        isBusy={status.state === 'validating' || status.state === 'uploading'}
+        isBusy={isBusy}
         selectedFile={selectedFile}
       />
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={handleReset}
+          disabled={isBusy}
+        >
+          Reset uploaded data
+        </Button>
+      </div>
       <div className="space-y-2">
         {(status.state === 'uploading' || progress > 0) && (
           <Progress value={progress} aria-live="polite" />
