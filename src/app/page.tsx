@@ -235,11 +235,11 @@ export default function UploadPage() {
   }
 
   const handleReset = useCallback(async () => {
-    const shouldReset = window.confirm(
+    const confirmed = window.confirm(
       'Are you sure you want to delete all uploaded listening data from Supabase? This action cannot be undone.',
     )
 
-    if (!shouldReset) {
+    if (!confirmed) {
       return
     }
 
@@ -247,21 +247,29 @@ export default function UploadPage() {
     setSelectedFile(null)
     setStatus({ state: 'resetting', message: 'Resetting uploaded listening data…' })
 
-    const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
+    try {
+      const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
 
-    if (error) {
+      if (error) {
+        console.error(error)
+        setStatus({
+          state: 'error',
+          message: `Supabase returned an error while resetting data: ${error.message}`,
+        })
+        return
+      }
+
+      setStatus({
+        state: 'success',
+        message: 'Successfully reset uploaded listening data.',
+      })
+    } catch (error) {
       console.error(error)
       setStatus({
         state: 'error',
-        message: `Supabase returned an error while resetting data: ${error.message}`,
+        message: 'An unexpected error occurred while deleting data. Please try again.',
       })
-      return
     }
-
-    setStatus({
-      state: 'success',
-      message: 'Successfully reset uploaded listening data.',
-    })
   }, [])
 
   const handleFile = useCallback(
@@ -366,50 +374,6 @@ export default function UploadPage() {
     [],
   )
 
-  const handleReset = useCallback(async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete all uploaded listens? This action cannot be undone.',
-    )
-
-    if (!confirmed) {
-      return
-    }
-
-    setStatus({
-      state: 'resetting',
-      message: 'Deleting existing listens from Supabase…',
-    })
-    setProgress(0)
-    setSelectedFile(null)
-
-    try {
-      const { error } = await supabase
-        .from('listens')
-        .delete()
-        .not('ts', 'is', null)
-
-      if (error) {
-        console.error(error)
-        setStatus({
-          state: 'error',
-          message: 'Supabase returned an error while deleting. Please try again.',
-        })
-        return
-      }
-
-      setStatus({
-        state: 'success',
-        message: 'All uploaded listens have been deleted.',
-      })
-    } catch (error) {
-      console.error(error)
-      setStatus({
-        state: 'error',
-        message:
-          'An unexpected error occurred while deleting data. Please try again.',
-      })
-    }
-  }, [])
 
   return (
     <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
