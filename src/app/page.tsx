@@ -104,7 +104,6 @@ type StatusState = {
   message: string
 }
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
 const BATCH_SIZE = 500
 
 const formatFileSize = (size: number) => {
@@ -244,11 +243,6 @@ export default function UploadPage() {
       const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
       if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
         resetState('The selected file is not recognized as JSON.', 'error')
-        return
-      }
-
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        resetState('The file is too large. Please upload a file smaller than 5 MB.', 'error')
         return
       }
 
