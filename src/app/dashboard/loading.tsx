@@ -1,5 +1,9 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { DashboardSummarySkeleton } from "@/components/dashboard/dashboard-summary"
+import { ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
+import { ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
+import { TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
+import { TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function DashboardLoading() {
@@ -31,6 +35,14 @@ export default function DashboardLoading() {
           <Skeleton className="h-4 w-[60%] max-w-md" />
         </div>
         <DashboardSummarySkeleton />
+        <section className="grid gap-6 lg:grid-cols-2">
+          <TopArtistsChartSkeleton />
+          <TopTracksTableSkeleton />
+        </section>
+        <section className="grid gap-6 lg:grid-cols-2">
+          <ListeningTrendsChartSkeleton />
+          <ListeningClockHeatmapSkeleton />
+        </section>
       </div>
     </DashboardShell>
   )

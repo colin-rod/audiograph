@@ -88,6 +88,18 @@ describe("Dashboard page", () => {
     expect(
       screen.getByTestId("dashboard-summary-skeleton")
     ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("top-artists-chart-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("top-tracks-table-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("listening-trends-chart-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("listening-clock-heatmap-skeleton")
+    ).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByTestId("dashboard-summary")).toBeInTheDocument()
@@ -102,16 +114,34 @@ describe("Dashboard page", () => {
     selectMock.mockResolvedValueOnce({
       data: [
         {
-          ms_played: 1_800_000,
-          artist: "Artist A",
-          track: "Track 1",
-          ts: "2024-01-01T00:00:00.000Z",
-        },
-        {
           ms_played: 3_600_000,
           artist: "Artist B",
+          track: "Track 1",
+          ts: "2024-01-15T12:00:00.000Z",
+        },
+        {
+          ms_played: 1_800_000,
+          artist: "Artist A",
           track: "Track 2",
-          ts: "2023-06-15T00:00:00.000Z",
+          ts: "2024-01-20T22:00:00.000Z",
+        },
+        {
+          ms_played: 900_000,
+          artist: "Artist A",
+          track: "Track 2",
+          ts: "2024-01-21T22:00:00.000Z",
+        },
+        {
+          ms_played: 2_400_000,
+          artist: "Artist C",
+          track: "Track 3",
+          ts: "2023-12-25T18:00:00.000Z",
+        },
+        {
+          ms_played: null,
+          artist: null,
+          track: null,
+          ts: null,
         },
       ],
       error: null,
@@ -133,6 +163,18 @@ describe("Dashboard page", () => {
     expect(
       screen.queryByTestId("dashboard-summary-skeleton")
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("top-artists-chart-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("top-tracks-table-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("listening-trends-chart-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("listening-clock-heatmap-skeleton")
+    ).not.toBeInTheDocument()
 
     const getCardValue = (label: string) => {
       const card = within(summary)
@@ -150,10 +192,36 @@ describe("Dashboard page", () => {
       expect(cardQueries.getByText(value)).toBeInTheDocument()
     }
 
-    expectCardValue("Hours listened", "1.5")
-    expectCardValue("Artists", "2")
-    expectCardValue("Tracks", "2")
+    expectCardValue("Hours listened", "2.4")
+    expectCardValue("Artists", "3")
+    expectCardValue("Tracks", "3")
     expectCardValue("Top artist", "Artist B")
-    expectCardValue("Most active year", "2023")
+    expectCardValue("Most active year", "2024")
+
+    expect(
+      screen.getByRole("heading", { name: /top artists/i })
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("Artist B")[0]).toBeInTheDocument()
+
+    expect(screen.getByRole("heading", { name: /top tracks/i })).toBeInTheDocument()
+    const tracksTable = screen.getByRole("table")
+    expect(within(tracksTable).getByText("Track 1")).toBeInTheDocument()
+    expect(within(tracksTable).getByText("1.0 hrs")).toBeInTheDocument()
+
+    expect(
+      screen.getByRole("heading", { name: /listening trends/i })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Jan\s*2024/)).toBeInTheDocument()
+    expect(screen.getByText(/Dec\s*2023/)).toBeInTheDocument()
+
+    expect(
+      screen.getByRole("heading", { name: /listening clock/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Monday at 12:00 — 1.0 hrs/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Saturday at 22:00 — 0.5 hrs/i)
+    ).toBeInTheDocument()
   })
 })
