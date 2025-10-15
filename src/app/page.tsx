@@ -254,14 +254,14 @@ export default function UploadPage() {
         console.error(error)
         setStatus({
           state: 'error',
-          message: `Supabase returned an error while resetting data: ${error.message}`,
+          message: 'Supabase returned an error while deleting. Please try again.',
         })
         return
       }
 
       setStatus({
         state: 'success',
-        message: 'Successfully reset uploaded listening data.',
+        message: 'All uploaded listens have been deleted.',
       })
     } catch (error) {
       console.error(error)
