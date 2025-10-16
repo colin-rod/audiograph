@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
+import { ShareCardsDialog } from "@/components/dashboard/share-cards"
 
 import {
   TimeframeFilter,
@@ -320,6 +321,7 @@ export default function DashboardPage() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
   useEffect(() => {
@@ -464,6 +466,19 @@ export default function DashboardPage() {
 
   const sectionMotion = useDashboardSectionTransition()
   const activeTimeframeKey = activeTimeframe?.value ?? "all"
+  const timeframeLabel = activeTimeframe?.label ?? ALL_TIME_OPTION.label
+  const isLoadingListens = listens === null
+  const hasShareableInsights = Boolean(
+    dashboardData &&
+      dashboardData.topArtists.length > 0 &&
+      dashboardData.topTracks.length > 0
+  )
+
+  useEffect(() => {
+    if (!hasShareableInsights) {
+      setIsShareDialogOpen(false)
+    }
+  }, [hasShareableInsights])
 
   const headerSection = (
     <section className="flex flex-wrap items-start justify-between gap-4">
@@ -475,11 +490,21 @@ export default function DashboardPage() {
         </p>
       </div>
       {errorState ? null : (
-        <TimeframeFilter
-          options={timeframeOptions}
-          value={selectedTimeframe}
-          onValueChange={setSelectedTimeframe}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsShareDialogOpen(true)}
+            disabled={isLoadingListens || !hasShareableInsights}
+          >
+            Share cards
+          </Button>
+          <TimeframeFilter
+            options={timeframeOptions}
+            value={selectedTimeframe}
+            onValueChange={setSelectedTimeframe}
+          />
+        </div>
       )}
     </section>
   )
@@ -642,6 +667,14 @@ export default function DashboardPage() {
           )}
         </AnimatePresence>
       </section>
+      <ShareCardsDialog
+        open={isShareDialogOpen}
+        onClose={() => setIsShareDialogOpen(false)}
+        timeframeLabel={timeframeLabel}
+        activeTimeframeKey={activeTimeframeKey}
+        topArtists={dashboardData?.topArtists ?? []}
+        topTracks={dashboardData?.topTracks ?? []}
+      />
     </div>
   )
 }
