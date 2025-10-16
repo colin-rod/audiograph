@@ -11,7 +11,7 @@ import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/componen
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
-import { supabase } from "@/lib/supabaseClient"
+import { createSupabaseClient } from "@/lib/supabaseClient"
 
 import {
   TimeframeFilter,
@@ -272,6 +272,7 @@ export default function DashboardPage() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
+  const supabase = useMemo(() => createSupabaseClient(), [])
 
   useEffect(() => {
     let active = true
@@ -300,7 +301,7 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [supabase])
 
   const timeframeOptions = useMemo<TimeframeOption[]>(() => {
     if (!listens || listens.length === 0) {
