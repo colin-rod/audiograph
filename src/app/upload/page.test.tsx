@@ -113,4 +113,21 @@ describe("UploadPage reset controls", () => {
       expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull(),
     );
   });
+
+  it("displays a configuration error when Supabase client creation fails", () => {
+    createSupabaseClientMock.mockImplementationOnce(() => {
+      throw new Error("NEXT_PUBLIC_SUPABASE_URL is not defined");
+    });
+
+    render(<UploadPage />);
+
+    expect(
+      screen.getByText(
+        "Supabase environment variables are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable uploads.",
+      ),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: /choose file/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reset uploaded data/i })).toBeDisabled();
+  });
 });
