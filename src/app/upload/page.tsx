@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 
 export const dynamic = "force-dynamic"
@@ -7,100 +7,24 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ListenInsert } from './spotify-parser'
 
-type SpotifyHistoryEntry = {
-  endTime?: string | null
-  ts?: string | null
-  master_metadata_album_artist_name?: string | null
-  artistName?: string | null
-  master_metadata_track_name?: string | null
-  trackName?: string | null
-  msPlayed?: number | null
-  ms_played?: number | null
+type WorkerStatusMessage = {
+  type: 'status'
+  message: string
 }
 
-type ListenInsert = {
-  ts: Date
-  artist: string | null
-  track: string | null
-  ms_played: number | null
+type WorkerSuccessMessage = {
+  type: 'success'
+  rows: ListenInsert[]
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
-
-const toSpotifyHistoryEntry = (value: unknown): SpotifyHistoryEntry | null => {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const endTime =
-    typeof value['endTime'] === 'string' ? (value['endTime'] as string) : null
-  const ts =
-    typeof value['ts'] === 'string' ? (value['ts'] as string) : null
-  const albumArtist =
-    typeof value['master_metadata_album_artist_name'] === 'string'
-      ? (value['master_metadata_album_artist_name'] as string)
-      : null
-  const artistName =
-    typeof value['artistName'] === 'string'
-      ? (value['artistName'] as string)
-      : null
-  const trackName =
-    typeof value['master_metadata_track_name'] === 'string'
-      ? (value['master_metadata_track_name'] as string)
-      : null
-  const fallbackTrackName =
-    typeof value['trackName'] === 'string'
-      ? (value['trackName'] as string)
-      : null
-  const msPlayed =
-    typeof value['msPlayed'] === 'number'
-      ? (value['msPlayed'] as number)
-      : null
-  const msPlayedSnake =
-    typeof value['ms_played'] === 'number'
-      ? (value['ms_played'] as number)
-      : null
-
-  const entry: SpotifyHistoryEntry = {
-    endTime,
-    ts,
-    master_metadata_album_artist_name: albumArtist,
-    artistName,
-    master_metadata_track_name: trackName,
-    trackName: fallbackTrackName,
-    msPlayed,
-    ms_played: msPlayedSnake,
-  }
-
-  return entry
+type WorkerErrorMessage = {
+  type: 'error'
+  message: string
 }
 
-const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
-  const timestamp = entry.endTime ?? entry.ts
-  if (!timestamp) {
-    return null
-  }
-
-  const parsedDate = new Date(timestamp)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null
-  }
-
-  const msPlayed = entry.msPlayed ?? entry.ms_played ?? null
-  const artist =
-    entry.master_metadata_album_artist_name ?? entry.artistName ?? null
-  const track =
-    entry.master_metadata_track_name ?? entry.trackName ?? null
-
-  return {
-    ts: parsedDate,
-    artist,
-    track,
-    ms_played: msPlayed,
-  }
-}
+type WorkerMessage = WorkerStatusMessage | WorkerSuccessMessage | WorkerErrorMessage
 
 type StatusState = {
   state: 'idle' | 'validating' | 'uploading' | 'resetting' | 'success' | 'error'
@@ -226,6 +150,7 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const workerRef = useRef<Worker | null>(null)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
   const resetState = useCallback(
@@ -236,6 +161,15 @@ export default function UploadPage() {
     },
     [],
   )
+
+  const terminateWorker = useCallback(() => {
+    if (workerRef.current) {
+      workerRef.current.terminate()
+      workerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => () => terminateWorker(), [terminateWorker])
 
   const handleResetRequest = useCallback(() => {
     setIsResetDialogOpen(true)
@@ -280,78 +214,8 @@ export default function UploadPage() {
     }
   }, [supabase])
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      setSelectedFile(file)
-      setProgress(0)
-      setStatus({ state: 'validating', message: 'Validating file…' })
-
-      if (!file.name.toLowerCase().endsWith('.json')) {
-        resetState('Only JSON files are supported.', 'error')
-        return
-      }
-
-      const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
-      if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
-        resetState('The selected file is not recognized as JSON.', 'error')
-        return
-      }
-
-      let text: string
-      try {
-        text = await file.text()
-      } catch (error) {
-        console.error(error)
-        resetState('Unable to read the file. Please try again.', 'error')
-        return
-      }
-
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(text)
-      } catch (error) {
-        console.error(error)
-        resetState('The file does not contain valid JSON.', 'error')
-        return
-      }
-
-      if (!Array.isArray(parsed)) {
-        resetState('Expected an array of listening records in the JSON file.', 'error')
-        return
-      }
-
-      const parsedRows = parsed
-        .map(toSpotifyHistoryEntry)
-        .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
-        .map(toListenInsert)
-        .filter((row): row is ListenInsert => row !== null)
-
-      const uniqueRows = new Map<string, ListenInsert>()
-      for (const row of parsedRows) {
-        const key = [
-          row.ts.toISOString(),
-          row.track ?? '',
-          row.artist ?? '',
-          row.ms_played === null ? '' : row.ms_played.toString(),
-        ].join('|')
-        if (!uniqueRows.has(key)) {
-          uniqueRows.set(key, row)
-        }
-      }
-
-      const rows = Array.from(uniqueRows.values())
-
-      if (rows.length === 0) {
-        resetState('No valid listening records were found in the file.', 'error')
-        return
-      }
-
-      const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
-      if (!hasTimestamp) {
-        resetState('No timestamp information found in the uploaded file.', 'error')
-        return
-      }
-
+  const uploadRows = useCallback(
+    async (rows: ListenInsert[]) => {
       setStatus({ state: 'uploading', message: 'Uploading data to Supabase…' })
 
       for (let index = 0; index < rows.length; index += BATCH_SIZE) {
@@ -381,6 +245,67 @@ export default function UploadPage() {
     },
     [resetState, supabase],
   )
+
+  const handleFile = useCallback(
+    (file: File) => {
+      setSelectedFile(file)
+      setProgress(0)
+      setStatus({ state: 'validating', message: 'Validating file…' })
+
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        resetState('Only JSON files are supported.', 'error')
+        return
+      }
+
+      const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
+      if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
+        resetState('The selected file is not recognized as JSON.', 'error')
+        return
+      }
+
+      terminateWorker()
+
+      const worker = new Worker(new URL('./historyParser.worker.ts', import.meta.url))
+      workerRef.current = worker
+
+      worker.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
+        const { data } = event
+
+        if (data.type === 'status') {
+          setStatus({ state: 'validating', message: data.message })
+          return
+        }
+
+        if (data.type === 'error') {
+          console.error(data.message)
+          terminateWorker()
+          resetState(data.message, 'error')
+          return
+        }
+
+        if (data.type === 'success') {
+          terminateWorker()
+          void uploadRows(data.rows)
+        }
+      })
+
+      worker.addEventListener('error', () => {
+        terminateWorker()
+        resetState(
+          'An unexpected error occurred while processing the file.',
+          'error',
+        )
+      })
+
+      worker.postMessage({ type: 'parse', file })
+    },
+    [resetState, terminateWorker, uploadRows],
+  )
+
+  const handleCancelProcessing = useCallback(() => {
+    terminateWorker()
+    resetState('File processing cancelled.', 'idle')
+  }, [resetState, terminateWorker])
 
 
   return (
@@ -443,6 +368,17 @@ export default function UploadPage() {
           Reset uploaded data
         </Button>
       </div>
+      {status.state === 'validating' ? (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancelProcessing}
+          >
+            Cancel processing
+          </Button>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={isResetDialogOpen}
         onCancel={handleCancelReset}
