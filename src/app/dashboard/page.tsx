@@ -79,13 +79,10 @@ const ALL_TIME_OPTION: TimeframeOption = {
   label: "All time",
 }
 
-type DashboardData = {
-  summary: ReturnType<typeof getDashboardData>["data"]["summary"]
-  topArtists: ReturnType<typeof getDashboardData>["data"]["topArtists"]
-  topTracks: ReturnType<typeof getDashboardData>["data"]["topTracks"]
-  listeningTrends: ReturnType<typeof getDashboardData>["data"]["listeningTrends"]
-  listeningClock: ReturnType<typeof getDashboardData>["data"]["listeningClock"]
-}
+type DashboardData = Extract<
+  Awaited<ReturnType<typeof getDashboardData>>,
+  { success: true }
+>["data"]
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
