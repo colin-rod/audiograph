@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { feedbackRequestSchema } from '@/lib/types/feedback'
-import { submitFeedbackToLinear } from '@/lib/linear/client'
 import { z } from 'zod'
+
+import { captureServerException } from '@/lib/monitoring/sentry/server'
+import { submitFeedbackToLinear } from '@/lib/linear/client'
+import { feedbackRequestSchema } from '@/lib/types/feedback'
 
 /**
  * POST /api/feedback - Submit feedback
@@ -39,6 +41,13 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       console.error('Failed to submit feedback to Linear:', result.error)
+      void captureServerException(result.error ?? 'Unknown Linear error', {
+        tags: { action: 'submit_feedback' },
+        extra: {
+          type: validatedData.type,
+          hasScreenshots: Boolean(validatedData.screenshotUrls?.length),
+        },
+      })
       return NextResponse.json(
         {
           success: false,
@@ -62,6 +71,9 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('Error processing feedback submission:', error)
+    void captureServerException(error, {
+      tags: { action: 'submit_feedback' },
+    })
 
     return NextResponse.json(
       {
