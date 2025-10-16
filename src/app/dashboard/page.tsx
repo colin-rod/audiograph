@@ -16,6 +16,22 @@ import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboa
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
+import {
+  YearOverYearDeltasCard,
+  YearOverYearDeltasSkeleton,
+  type YearOverYearDelta,
+} from "@/components/dashboard/year-over-year-deltas"
+import {
+  TimeframeBenchmarkCard,
+  TimeframeBenchmarkCardSkeleton,
+  type TimeframeBenchmarkData,
+  type TimeframeBenchmarkMetric,
+} from "@/components/dashboard/timeframe-benchmark"
+import {
+  DaypartShareChart,
+  DaypartShareChartSkeleton,
+  type DaypartShareDatum,
+} from "@/components/dashboard/daypart-share-chart"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
@@ -236,6 +252,30 @@ const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 })
 
+const WEEKDAY_SHORT_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+})
+
+const DAYPART_SEGMENTS = [
+  { key: "morning", label: "Morning", startHour: 5, endHour: 12 },
+  { key: "afternoon", label: "Afternoon", startHour: 12, endHour: 17 },
+  { key: "evening", label: "Evening", startHour: 17, endHour: 24 },
+] as const
+
+type DaypartKey = (typeof DAYPART_SEGMENTS)[number]["key"]
+
+type AggregatedPeriodMetrics = {
+  key: string
+  label: string
+  ms: number
+  uniqueArtists: number
+  sessions: number
+}
+
+type AggregatedYearMetrics = AggregatedPeriodMetrics & { year: number }
+
+type AggregatedMonthMetrics = AggregatedPeriodMetrics & { year: number; month: number }
+
 const calculateListeningTrends = (listens: ListenSummaryRow[]) => {
   const monthlyTotals = new Map<string, number>()
 
@@ -302,6 +342,7 @@ type DashboardData = {
   topTracks: ReturnType<typeof calculateTopTracks>
   listeningTrends: ReturnType<typeof calculateListeningTrends>
   listeningClock: ReturnType<typeof calculateListeningClock>
+  daypartShare: DaypartShareDatum[]
 }
 
 const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => ({
@@ -310,12 +351,322 @@ const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => (
   topTracks: calculateTopTracks(listens),
   listeningTrends: calculateListeningTrends(listens),
   listeningClock: calculateListeningClock(listens),
+  daypartShare: calculateDaypartShare(listens),
 })
 
 const ALL_TIME_OPTION: TimeframeOption = {
   type: "all",
   value: "all",
   label: "All time",
+}
+
+const getDaypartKey = (hour: number): DaypartKey => {
+  for (const segment of DAYPART_SEGMENTS) {
+    if (hour >= segment.startHour && hour < segment.endHour) {
+      return segment.key
+    }
+  }
+
+  return "evening"
+}
+
+const aggregateListensByYear = (
+  listens: ListenSummaryRow[]
+): AggregatedYearMetrics[] => {
+  const yearMap = new Map<number, { ms: number; artists: Set<string>; sessions: number }>()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const year = tsDate.getUTCFullYear()
+    const entry =
+      yearMap.get(year) ?? { ms: 0, artists: new Set<string>(), sessions: 0 }
+
+    entry.ms += listen.ms_played ?? 0
+    entry.sessions += 1
+    if (listen.artist) {
+      entry.artists.add(listen.artist)
+    }
+
+    yearMap.set(year, entry)
+  })
+
+  return Array.from(yearMap.entries())
+    .map(([year, value]) => ({
+      key: `year-${year}`,
+      label: year.toString(),
+      year,
+      ms: value.ms,
+      uniqueArtists: value.artists.size,
+      sessions: value.sessions,
+    }))
+    .sort((a, b) => a.year - b.year)
+}
+
+const aggregateListensByMonth = (
+  listens: ListenSummaryRow[]
+): AggregatedMonthMetrics[] => {
+  const monthMap = new Map<
+    string,
+    { ms: number; artists: Set<string>; sessions: number; year: number; month: number }
+  >()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+
+    const year = tsDate.getUTCFullYear()
+    const month = tsDate.getUTCMonth() + 1
+    const key = `${year}-${String(month).padStart(2, "0")}`
+    const entry =
+      monthMap.get(key) ?? {
+        ms: 0,
+        artists: new Set<string>(),
+        sessions: 0,
+        year,
+        month,
+      }
+
+    entry.ms += listen.ms_played ?? 0
+    entry.sessions += 1
+    if (listen.artist) {
+      entry.artists.add(listen.artist)
+    }
+
+    monthMap.set(key, entry)
+  })
+
+  return Array.from(monthMap.entries())
+    .map(([, value]) => {
+      const date = new Date(Date.UTC(value.year, value.month - 1, 1))
+      return {
+        key: `month-${value.year}-${String(value.month).padStart(2, "0")}`,
+        label: MONTH_LABEL_FORMATTER.format(date),
+        year: value.year,
+        month: value.month,
+        ms: value.ms,
+        uniqueArtists: value.artists.size,
+        sessions: value.sessions,
+      }
+    })
+    .sort((a, b) => a.key.localeCompare(b.key))
+}
+
+const formatPercentageDelta = (
+  currentValue: number,
+  previousValue: number
+): number | null => {
+  if (previousValue <= 0) {
+    return null
+  }
+
+  const delta = ((currentValue - previousValue) / previousValue) * 100
+  return Number(delta.toFixed(1))
+}
+
+const calculateYearOverYearDeltas = (
+  listens: ListenSummaryRow[]
+): YearOverYearDelta[] => {
+  const aggregated = aggregateListensByYear(listens)
+
+  return aggregated.map((current, index) => {
+    const previous = aggregated[index - 1]
+
+    const hours = Number((current.ms / MS_PER_HOUR).toFixed(1))
+    const hoursDelta = previous
+      ? formatPercentageDelta(current.ms, previous.ms)
+      : null
+    const uniqueArtistsDelta = previous
+      ? formatPercentageDelta(current.uniqueArtists, previous.uniqueArtists)
+      : null
+    const sessionsDelta = previous
+      ? formatPercentageDelta(current.sessions, previous.sessions)
+      : null
+
+    return {
+      year: current.year,
+      hours,
+      hoursDelta,
+      uniqueArtists: current.uniqueArtists,
+      uniqueArtistsDelta,
+      sessions: current.sessions,
+      sessionsDelta,
+    }
+  })
+}
+
+const calculateTimeframeBenchmark = (
+  listens: ListenSummaryRow[],
+  timeframe: TimeframeOption,
+  timeframeLabel: string
+): TimeframeBenchmarkData | null => {
+  if (timeframe.type === "all") {
+    return null
+  }
+
+  const aggregated =
+    timeframe.type === "year"
+      ? aggregateListensByYear(listens)
+      : aggregateListensByMonth(listens)
+
+  if (aggregated.length === 0) {
+    return {
+      timeframeLabel,
+      scopeLabel:
+        timeframe.type === "year"
+          ? "We need at least one year of listens to compare."
+          : "We need at least one month of listens to compare.",
+      hasComparisons: false,
+      metrics: [],
+    }
+  }
+
+  const targetKey = timeframe.value
+  const target = aggregated.find((item) => item.key === targetKey)
+
+  if (!target) {
+    return {
+      timeframeLabel,
+      scopeLabel: "We couldn't find listens for this timeframe.",
+      hasComparisons: false,
+      metrics: [],
+    }
+  }
+
+  const totalPeriods = aggregated.length
+  const sortedByHours = [...aggregated].sort((a, b) => {
+    if (b.ms === a.ms) {
+      return a.label.localeCompare(b.label)
+    }
+    return b.ms - a.ms
+  })
+  const sortedByArtists = [...aggregated].sort((a, b) => {
+    if (b.uniqueArtists === a.uniqueArtists) {
+      return a.label.localeCompare(b.label)
+    }
+    return b.uniqueArtists - a.uniqueArtists
+  })
+
+  const findRank = <T extends AggregatedPeriodMetrics>(list: T[], key: string) => {
+    const index = list.findIndex((item) => item.key === key)
+    if (index === -1) {
+      return { rank: null, leader: list[0] ?? null }
+    }
+
+    return { rank: index + 1, leader: list[0] ?? null }
+  }
+
+  const hoursRankInfo = findRank(sortedByHours, targetKey)
+  const artistsRankInfo = findRank(sortedByArtists, targetKey)
+
+  const hoursValue = Number((target.ms / MS_PER_HOUR).toFixed(1))
+  const leaderHours = (hoursRankInfo.leader?.ms ?? 0) / MS_PER_HOUR
+  const scopeLabel =
+    timeframe.type === "year"
+      ? `Compared with ${totalPeriods} year${totalPeriods === 1 ? "" : "s"}.`
+      : `Compared with ${totalPeriods} month${totalPeriods === 1 ? "" : "s"}.`
+
+  const metrics: TimeframeBenchmarkMetric[] = [
+    {
+      key: "hours",
+      label: "Hours listened",
+      value: hoursValue,
+      displayValue: `${hoursValue.toFixed(1)} hrs`,
+      rank: hoursRankInfo.rank ?? null,
+      total: totalPeriods,
+      leaderLabel: hoursRankInfo.leader?.label ?? timeframeLabel,
+      leaderDisplayValue: `${leaderHours.toFixed(1)} hrs`,
+    },
+    {
+      key: "artists",
+      label: "Artists discovered",
+      value: target.uniqueArtists,
+      displayValue: target.uniqueArtists.toLocaleString(),
+      rank: artistsRankInfo.rank ?? null,
+      total: totalPeriods,
+      leaderLabel: artistsRankInfo.leader?.label ?? timeframeLabel,
+      leaderDisplayValue: (artistsRankInfo.leader?.uniqueArtists ?? 0).toLocaleString(),
+    },
+  ]
+
+  return {
+    timeframeLabel,
+    scopeLabel,
+    hasComparisons: totalPeriods > 1,
+    metrics,
+  }
+}
+
+const calculateDaypartShare = (
+  listens: ListenSummaryRow[]
+): DaypartShareDatum[] => {
+  const dayMap = new Map<
+    number,
+    {
+      morning: number
+      afternoon: number
+      evening: number
+      total: number
+    }
+  >()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const day = tsDate.getUTCDay()
+    const hour = tsDate.getUTCHours()
+    const msPlayed = listen.ms_played ?? 0
+    const daypartKey = getDaypartKey(hour)
+    const entry =
+      dayMap.get(day) ?? { morning: 0, afternoon: 0, evening: 0, total: 0 }
+
+    if (daypartKey === "morning") {
+      entry.morning += msPlayed
+    } else if (daypartKey === "afternoon") {
+      entry.afternoon += msPlayed
+    } else {
+      entry.evening += msPlayed
+    }
+
+    entry.total += msPlayed
+    dayMap.set(day, entry)
+  })
+
+  return Array.from({ length: 7 }).map((_, day) => {
+    const entry = dayMap.get(day) ?? {
+      morning: 0,
+      afternoon: 0,
+      evening: 0,
+      total: 0,
+    }
+
+    const total = entry.total || 0
+    const toShare = (value: number) =>
+      total === 0 ? 0 : Number(((value / total) * 100).toFixed(1))
+
+    const totalHours = Number((total / MS_PER_HOUR).toFixed(1))
+    const morningHours = Number((entry.morning / MS_PER_HOUR).toFixed(1))
+    const afternoonHours = Number((entry.afternoon / MS_PER_HOUR).toFixed(1))
+    const eveningHours = Number((entry.evening / MS_PER_HOUR).toFixed(1))
+
+    const referenceDate = new Date(Date.UTC(2023, 0, 1 + day))
+    const dayLabel = WEEKDAY_SHORT_FORMATTER.format(referenceDate)
+
+    return {
+      day,
+      dayLabel,
+      morning: toShare(entry.morning),
+      afternoon: toShare(entry.afternoon),
+      evening: toShare(entry.evening),
+      totalHours,
+      morningHours,
+      afternoonHours,
+      eveningHours,
+    }
+  })
 }
 
 export default function DashboardPage() {
@@ -467,10 +818,35 @@ export default function DashboardPage() {
     return calculateDashboardData(filteredListens)
   }, [filteredListens])
 
+  const yearOverYearData = useMemo(() => {
+    if (listens === null) {
+      return null
+    }
+
+    return calculateYearOverYearDeltas(listens)
+  }, [listens])
+
+  const timeframeLabel = activeTimeframe?.label ?? ALL_TIME_OPTION.label
+
+  const timeframeBenchmarkData = useMemo(() => {
+    if (listens === null) {
+      return null
+    }
+
+    if (!activeTimeframe) {
+      return null
+    }
+
+    return calculateTimeframeBenchmark(listens, activeTimeframe, timeframeLabel)
+  }, [activeTimeframe, listens, timeframeLabel])
+
+  const shouldRenderBenchmarkCard =
+    activeTimeframe?.type === "year" || activeTimeframe?.type === "month"
+
   const sectionMotion = useDashboardSectionTransition()
   const activeTimeframeKey = activeTimeframe?.value ?? "all"
-  const timeframeLabel = activeTimeframe?.label ?? ALL_TIME_OPTION.label
   const isLoadingListens = listens === null
+  const isBenchmarkLoading = shouldRenderBenchmarkCard && isLoadingListens
   const hasShareableInsights = Boolean(
     dashboardData &&
       dashboardData.topArtists.length > 0 &&
@@ -563,6 +939,62 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
       <section
+        aria-label="Comparative trends"
+        className="grid gap-6 lg:grid-cols-2"
+      >
+        <AnimatePresence mode="wait">
+          {yearOverYearData ? (
+            <motion.div
+              key={`year-over-year-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <YearOverYearDeltasCard data={yearOverYearData} className="h-full" />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`year-over-year-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <YearOverYearDeltasSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {shouldRenderBenchmarkCard ? (
+          <AnimatePresence mode="wait">
+            {timeframeBenchmarkData ? (
+              <motion.div
+                key={`timeframe-benchmark-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TimeframeBenchmarkCard
+                  data={timeframeBenchmarkData}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : isBenchmarkLoading ? (
+              <motion.div
+                key={`timeframe-benchmark-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TimeframeBenchmarkCardSkeleton className="h-full" />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        ) : null}
+      </section>
+      <section
         aria-label="Artist and track insights"
         className="grid gap-6 lg:grid-cols-2"
       >
@@ -615,7 +1047,7 @@ export default function DashboardPage() {
       </section>
       <section
         aria-label="Listening trends and clock"
-        className="grid gap-6 lg:grid-cols-2"
+        className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3"
       >
         <AnimatePresence mode="wait">
           {dashboardData ? (
@@ -646,11 +1078,37 @@ export default function DashboardPage() {
         <AnimatePresence mode="wait">
           {dashboardData ? (
             <motion.div
-              key={`listening-clock-${activeTimeframeKey}`}
+              key={`daypart-share-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
               className="h-full"
+            >
+              <DaypartShareChart
+                data={dashboardData.daypartShare}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`daypart-share-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <DaypartShareChartSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`listening-clock-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full lg:col-span-2 xl:col-span-3"
             >
               <ListeningClockHeatmap
                 data={dashboardData.listeningClock}
