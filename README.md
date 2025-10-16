@@ -105,6 +105,30 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Getting Your Spotify Data as JSON
+
+Audiograph can visualise the listening history that Spotify shares in its personal data export. Follow the steps below to request the JSON files that the app expects:
+
+1. **Request the archive**
+   - Sign in to your account at [spotify.com/account](https://www.spotify.com/account/overview/).
+   - In the left navigation choose **Privacy settings** (or browse directly to [spotify.com/account/privacy](https://www.spotify.com/account/privacy/)).
+   - Scroll to the **Download your data** section and select **Extended streaming history**.
+   - Confirm the email address Spotify should use and click **Request data**. Spotify may ask you to verify ownership of the account.
+
+2. **Wait for Spotify’s email**
+   - Spotify prepares the archive in the background; this can take anywhere from a few hours to a couple of days depending on account size.
+   - When it is ready you will receive an email titled “Your Spotify data is ready to download”. The email contains a one-time download link that expires after 14 days.
+
+3. **Download and extract the archive**
+   - Download the `.zip` file from the email link and store it somewhere safe.
+   - Unzip the archive. Inside you will find folders such as `MyData/` that include JSON files (`Streaming_History_Audio.json`, `Streaming_History_Audio_2023.json`, etc.).
+
+4. **Use the JSON in Audiograph**
+   - Copy the relevant JSON files into the location expected by your Audiograph workflow (for example, upload them via the app’s UI or place them in the project’s `public/` directory if you are developing locally).
+   - Keep the originals in a secure location—Spotify’s archive contains sensitive account information.
+
+For additional detail on the export, review Spotify’s [Support article on personal data](https://support.spotify.com/article/data-rights-and-privacy-settings/).
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
