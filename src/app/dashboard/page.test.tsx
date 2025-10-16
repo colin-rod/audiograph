@@ -33,6 +33,7 @@ const {
   getSessionMock,
   redirectMock,
 } = vi.hoisted(() => {
+const { createSupabaseClientMock, usePathnameMock, selectMock, fromMock } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
     data: [],
@@ -60,6 +61,15 @@ const {
     createSupabaseBrowserClientMock: createClient,
     getSessionMock: getSession,
     redirectMock: redirect,
+  const createSupabaseClient = vi.fn(() => ({
+    from,
+  }))
+
+  return {
+    createSupabaseClientMock: createSupabaseClient,
+    usePathnameMock: pathname,
+    selectMock: select,
+    fromMock: from,
   }
 })
 
@@ -98,6 +108,7 @@ vi.mock("@/lib/supabase/server", () => ({
       getSession: () => getSessionMock(),
     },
   }),
+  createSupabaseClient: createSupabaseClientMock,
 }))
 
 import DashboardLayout from "./layout"
@@ -143,6 +154,9 @@ describe("Dashboard page", () => {
     })
 
     redirectMock.mockReset()
+    createSupabaseClientMock.mockClear()
+    selectMock.mockClear()
+    fromMock.mockClear()
   })
 
   afterEach(() => {

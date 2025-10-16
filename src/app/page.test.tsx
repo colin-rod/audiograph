@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import UploadPage from "./page"
 
-const { notMock, deleteMock, fromMock } = vi.hoisted(() => {
+const { createSupabaseClientMock, notMock, deleteMock, fromMock } = vi.hoisted(() => {
   const localNotMock = vi.fn()
   const localDeleteMock = vi.fn(() => ({ not: localNotMock }))
   const localFromMock = vi.fn(() => ({ delete: localDeleteMock }))
+  const localCreateSupabaseClientMock = vi.fn(() => ({
+    from: localFromMock,
+  }))
 
   return {
+    createSupabaseClientMock: localCreateSupabaseClientMock,
     notMock: localNotMock,
     deleteMock: localDeleteMock,
     fromMock: localFromMock,
@@ -26,9 +30,13 @@ vi.mock("@/lib/supabaseClient", () => {
     createSupabaseBrowserClient: () => supabaseClient,
   }
 })
+vi.mock("@/lib/supabaseClient", () => ({
+  createSupabaseClient: createSupabaseClientMock,
+}))
 
 describe("UploadPage reset controls", () => {
   beforeEach(() => {
+    createSupabaseClientMock.mockClear()
     fromMock.mockClear()
     deleteMock.mockClear()
     notMock.mockClear()

@@ -14,6 +14,7 @@ import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
+import { createSupabaseClient } from "@/lib/supabaseClient"
 
 import {
   TimeframeFilter,
@@ -317,6 +318,7 @@ export default function DashboardPage() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
+  const supabase = useMemo(() => createSupabaseClient(), [])
 
   useEffect(() => {
     let active = true
@@ -357,7 +359,7 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [supabase])
 
   const timeframeOptions = useMemo<TimeframeOption[]>(() => {
     if (!listens || listens.length === 0) {

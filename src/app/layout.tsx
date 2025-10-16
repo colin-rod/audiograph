@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { AuthButtonGroup } from "@/components/auth/auth-button-group";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 
 const geistSans = Geist({
@@ -28,8 +30,18 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <div className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-            {children}
+          <div
+            className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
+          >
+            <header className="border-b bg-background">
+              <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
+                <Link className="text-base font-semibold" href="/">
+                  Audiograph
+                </Link>
+                <AuthButtonGroup />
+              </div>
+            </header>
+            <main className="flex-1">{children}</main>
           </div>
         </ThemeProvider>
       </body>
