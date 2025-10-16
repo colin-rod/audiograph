@@ -16,6 +16,8 @@ import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboa
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
+import { DiscoveryTrackerChart, DiscoveryTrackerChartSkeleton } from "@/components/dashboard/discovery-tracker-chart"
+import { LoyaltyGaugeCard, LoyaltyGaugeCardSkeleton } from "@/components/dashboard/loyalty-gauge-card"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
@@ -111,6 +113,7 @@ const toListenSummaryRow = (value: unknown): ListenSummaryRow | null => {
 }
 
 const MS_PER_HOUR = 1000 * 60 * 60
+const REPEAT_TRACK_THRESHOLD = 5
 
 const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats => {
   const totalMs = listens.reduce(
@@ -296,12 +299,149 @@ const calculateListeningClock = (listens: ListenSummaryRow[]) => {
     })
 }
 
+const calculateDiscoveryTrends = (listens: ListenSummaryRow[]) => {
+  const artistFirstSeen = new Map<string, string>()
+  const trackFirstSeen = new Map<string, string>()
+
+  const sortedListens = listens
+    .filter((listen): listen is ListenSummaryRow & { ts: string } => {
+      if (!listen.ts) return false
+      const tsDate = new Date(listen.ts)
+      return !Number.isNaN(tsDate.getTime())
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.ts).getTime()
+      const bTime = new Date(b.ts).getTime()
+      return aTime - bTime
+    })
+
+  sortedListens.forEach((listen) => {
+    const tsDate = new Date(listen.ts)
+    const year = tsDate.getUTCFullYear()
+    const month = tsDate.getUTCMonth() + 1
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`
+
+    if (listen.artist && !artistFirstSeen.has(listen.artist)) {
+      artistFirstSeen.set(listen.artist, monthKey)
+    }
+
+    if (listen.track && !trackFirstSeen.has(listen.track)) {
+      trackFirstSeen.set(listen.track, monthKey)
+    }
+  })
+
+  const artistCounts = new Map<string, number>()
+  const trackCounts = new Map<string, number>()
+
+  artistFirstSeen.forEach((month) => {
+    artistCounts.set(month, (artistCounts.get(month) ?? 0) + 1)
+  })
+
+  trackFirstSeen.forEach((month) => {
+    trackCounts.set(month, (trackCounts.get(month) ?? 0) + 1)
+  })
+
+  const monthKeys = new Set<string>([
+    ...artistCounts.keys(),
+    ...trackCounts.keys(),
+  ])
+
+  return Array.from(monthKeys)
+    .sort((a, b) => a.localeCompare(b))
+    .map((month) => {
+      const [yearStr, monthStr] = month.split("-")
+      const year = Number(yearStr)
+      const monthIndex = Number(monthStr) - 1
+      const date = new Date(Date.UTC(year, monthIndex, 1))
+
+      return {
+        month,
+        label: MONTH_LABEL_FORMATTER.format(date),
+        newArtists: artistCounts.get(month) ?? 0,
+        newTracks: trackCounts.get(month) ?? 0,
+      }
+    })
+}
+
+const calculateLoyaltyStats = (listens: ListenSummaryRow[]) => {
+  type TrackKey = { track: string; artist: string | null }
+
+  const monthlyTrackPlays = new Map<string, Map<string, number>>()
+  const totalTrackCounts = new Map<string, { info: TrackKey; count: number }>()
+
+  listens.forEach((listen) => {
+    if (!listen.ts || !listen.track) return
+
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+
+    const year = tsDate.getUTCFullYear()
+    const month = tsDate.getUTCMonth() + 1
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`
+    const trackKey = `${listen.track}__${listen.artist ?? ""}`
+
+    const monthMap = monthlyTrackPlays.get(monthKey) ?? new Map<string, number>()
+    monthMap.set(trackKey, (monthMap.get(trackKey) ?? 0) + 1)
+    monthlyTrackPlays.set(monthKey, monthMap)
+
+    const entry =
+      totalTrackCounts.get(trackKey) ?? {
+        info: { track: listen.track, artist: listen.artist ?? null },
+        count: 0,
+      }
+    entry.count += 1
+    totalTrackCounts.set(trackKey, entry)
+  })
+
+  const monthlyRepeatTrackCounts = Array.from(monthlyTrackPlays.entries())
+    .map(([month, trackCounts]) => {
+      const repeatTracks = Array.from(trackCounts.values()).filter(
+        (count) => count >= REPEAT_TRACK_THRESHOLD
+      ).length
+
+      const [yearStr, monthStr] = month.split("-")
+      const year = Number(yearStr)
+      const monthIndex = Number(monthStr) - 1
+      const date = new Date(Date.UTC(year, monthIndex, 1))
+
+      return {
+        month,
+        label: MONTH_LABEL_FORMATTER.format(date),
+        repeatTracks,
+      }
+    })
+    .sort((a, b) => a.month.localeCompare(b.month))
+
+  const topRepeatTracks = Array.from(totalTrackCounts.values())
+    .filter(({ count }) => count >= REPEAT_TRACK_THRESHOLD)
+    .sort((a, b) => {
+      if (b.count === a.count) {
+        return a.info.track.localeCompare(b.info.track)
+      }
+      return b.count - a.count
+    })
+    .slice(0, 5)
+    .map(({ info, count }) => ({
+      track: info.track,
+      artist: info.artist,
+      playCount: count,
+    }))
+
+  return {
+    threshold: REPEAT_TRACK_THRESHOLD,
+    monthlyRepeatTrackCounts,
+    topRepeatTracks,
+  }
+}
+
 type DashboardData = {
   summary: DashboardStats
   topArtists: ReturnType<typeof calculateTopArtists>
   topTracks: ReturnType<typeof calculateTopTracks>
   listeningTrends: ReturnType<typeof calculateListeningTrends>
   listeningClock: ReturnType<typeof calculateListeningClock>
+  discoveryTrends: ReturnType<typeof calculateDiscoveryTrends>
+  loyaltyStats: ReturnType<typeof calculateLoyaltyStats>
 }
 
 const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => ({
@@ -310,6 +450,8 @@ const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => (
   topTracks: calculateTopTracks(listens),
   listeningTrends: calculateListeningTrends(listens),
   listeningClock: calculateListeningClock(listens),
+  discoveryTrends: calculateDiscoveryTrends(listens),
+  loyaltyStats: calculateLoyaltyStats(listens),
 })
 
 const ALL_TIME_OPTION: TimeframeOption = {
@@ -609,6 +751,63 @@ export default function DashboardPage() {
               className="h-full"
             >
               <TopTracksTableSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+      <section
+        aria-label="Artist and track deep dives"
+        className="grid gap-6 lg:grid-cols-2"
+      >
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`discovery-tracker-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <DiscoveryTrackerChart
+                data={dashboardData.discoveryTrends}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`discovery-tracker-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <DiscoveryTrackerChartSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`loyalty-gauge-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <LoyaltyGaugeCard
+                data={dashboardData.loyaltyStats}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`loyalty-gauge-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <LoyaltyGaugeCardSkeleton className="h-full" />
             </motion.div>
           )}
         </AnimatePresence>
