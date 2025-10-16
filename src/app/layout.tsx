@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -35,32 +36,34 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <SentryProvider>
-          <PostHogProvider>
-            <ThemeProvider>
-              <div
-                className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
-              >
-                <header className="border-b bg-background">
-                  <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
-                    <Link className="text-base font-semibold" href="/">
-                      Audiograph
-                    </Link>
-                    <div className="flex items-center gap-6">
-                      <nav className="flex items-center gap-6 text-sm font-medium text-muted-foreground">
-                        <Link className="transition hover:text-primary" href="/upload">
-                          Upload
-                        </Link>
-                      </nav>
-                      <AuthButtonGroup />
+          <Suspense fallback={null}>
+            <PostHogProvider>
+              <ThemeProvider>
+                <div
+                  className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
+                >
+                  <header className="border-b bg-background">
+                    <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
+                      <Link className="text-base font-semibold" href="/">
+                        Audiograph
+                      </Link>
+                      <div className="flex items-center gap-6">
+                        <nav className="flex items-center gap-6 text-sm font-medium text-muted-foreground">
+                          <Link className="transition hover:text-primary" href="/upload">
+                            Upload
+                          </Link>
+                        </nav>
+                        <AuthButtonGroup />
+                      </div>
                     </div>
-                  </div>
-                </header>
-                <main className="flex-1">{children}</main>
-                <FeedbackButton />
-              </div>
-              <Toaster />
-            </ThemeProvider>
-          </PostHogProvider>
+                  </header>
+                  <main className="flex-1">{children}</main>
+                  <FeedbackButton />
+                </div>
+                <Toaster />
+              </ThemeProvider>
+            </PostHogProvider>
+          </Suspense>
         </SentryProvider>
       </body>
     </html>
