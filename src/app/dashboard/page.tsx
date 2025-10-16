@@ -463,6 +463,7 @@ export default function DashboardPage() {
   }, [filteredListens])
 
   const sectionMotion = useDashboardSectionTransition()
+  const activeTimeframeKey = activeTimeframe?.value ?? "all"
 
   const headerSection = (
     <section className="flex flex-wrap items-start justify-between gap-4">
@@ -515,7 +516,7 @@ export default function DashboardPage() {
       <AnimatePresence mode="wait">
         {dashboardData ? (
           <motion.div
-            key="dashboard-summary"
+            key={`dashboard-summary-${activeTimeframeKey}`}
             initial={sectionMotion.initial}
             animate={sectionMotion.animate}
             exit={sectionMotion.exit}
@@ -524,7 +525,7 @@ export default function DashboardPage() {
           </motion.div>
         ) : (
           <motion.div
-            key="dashboard-summary-skeleton"
+            key={`dashboard-summary-skeleton-${activeTimeframeKey}`}
             initial={sectionMotion.initial}
             animate={sectionMotion.animate}
             exit={sectionMotion.exit}
@@ -540,7 +541,7 @@ export default function DashboardPage() {
         <AnimatePresence mode="wait">
           {dashboardData ? (
             <motion.div
-              key="top-artists"
+              key={`top-artists-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -550,7 +551,7 @@ export default function DashboardPage() {
             </motion.div>
           ) : (
             <motion.div
-              key="top-artists-skeleton"
+              key={`top-artists-skeleton-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -563,7 +564,7 @@ export default function DashboardPage() {
         <AnimatePresence mode="wait">
           {dashboardData ? (
             <motion.div
-              key="top-tracks"
+              key={`top-tracks-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -573,7 +574,7 @@ export default function DashboardPage() {
             </motion.div>
           ) : (
             <motion.div
-              key="top-tracks-skeleton"
+              key={`top-tracks-skeleton-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -591,7 +592,7 @@ export default function DashboardPage() {
         <AnimatePresence mode="wait">
           {dashboardData ? (
             <motion.div
-              key="listening-trends"
+              key={`listening-trends-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -604,7 +605,7 @@ export default function DashboardPage() {
             </motion.div>
           ) : (
             <motion.div
-              key="listening-trends-skeleton"
+              key={`listening-trends-skeleton-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -617,7 +618,7 @@ export default function DashboardPage() {
         <AnimatePresence mode="wait">
           {dashboardData ? (
             <motion.div
-              key="listening-clock"
+              key={`listening-clock-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
@@ -630,7 +631,7 @@ export default function DashboardPage() {
             </motion.div>
           ) : (
             <motion.div
-              key="listening-clock-skeleton"
+              key={`listening-clock-skeleton-${activeTimeframeKey}`}
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
