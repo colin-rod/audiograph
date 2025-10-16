@@ -44,6 +44,9 @@
 }
 
 :root {
+  --font-geist-sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-geist-mono: "JetBrains Mono", "Fira Mono", "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
   --radius: 0.625rem;
   --background: oklch(0.985 0.015 295.5);
   --foreground: oklch(0.22 0.045 282.3);
@@ -117,6 +120,11 @@
     @apply border-border outline-ring/50;
   }
   body {
+    font-family: var(--font-geist-sans);
     @apply bg-background text-foreground;
+  }
+  code,
+  pre {
+    font-family: var(--font-geist-mono);
   }
 }

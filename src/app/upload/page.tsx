@@ -199,11 +199,16 @@ const decompressDeflateRaw = async (data: Uint8Array) => {
     throw new Error('ZIP_DECOMPRESSION_UNSUPPORTED')
   }
 
-  const stream = new Blob([data])
+  const arrayBuffer = data.buffer.slice(
+    data.byteOffset,
+    data.byteOffset + data.byteLength,
+  ) as ArrayBuffer
+
+  const stream = new Blob([arrayBuffer])
     .stream()
     .pipeThrough(new DecompressionStream('deflate-raw'))
-  const arrayBuffer = await new Response(stream).arrayBuffer()
-  return new Uint8Array(arrayBuffer)
+  const decompressed = await new Response(stream).arrayBuffer()
+  return new Uint8Array(decompressed)
 }
 
 const readZipJsonFiles = async (file: File) => {
@@ -442,7 +447,27 @@ export default function UploadPage() {
   const [fileQueue, setFileQueue] = useState<File[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const supabase = useMemo<ReturnType<typeof createSupabaseClient> | null>(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error('Failed to initialize the Supabase client.', error)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not available in this environment. Please refresh and try again after configuring it.',
+      })
+    }
+  }, [supabase])
 
   const clearQueue = useCallback(() => {
     setFileQueue([])
@@ -473,6 +498,14 @@ export default function UploadPage() {
       state: 'resetting',
       message: 'Deleting existing listens from Supabase…',
     })
+
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not available in this environment. Please refresh and try again.',
+      })
+      return
+    }
 
     try {
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
@@ -627,6 +660,11 @@ export default function UploadPage() {
           state: 'uploading',
           message: `Uploading ${uniqueRows.length} records from ${sourceDescription}…`,
         })
+
+        if (!supabase) {
+          stopWithError('Supabase is not available in this environment. Please refresh and try again.')
+          return
+        }
 
         for (let index = 0; index < uniqueRows.length; index += BATCH_SIZE) {
           const batch = uniqueRows.slice(index, index + BATCH_SIZE)

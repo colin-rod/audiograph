@@ -37,6 +37,31 @@ const headerContent = (
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase environment variables are not configured.")
+    return (
+      <DashboardShell
+        sidebar={sidebarContent}
+        header={headerContent}
+        headerActions={
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+          </div>
+        }
+      >
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <h2 className="text-xl font-semibold">Supabase is not configured</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable the dashboard.
+          </p>
+        </div>
+      </DashboardShell>
+    )
+  }
+
   const supabase = createSupabaseServerClient()
   const {
     data: { session },

@@ -68,9 +68,7 @@ const {
     },
   }
   const createClient = vi.fn(() => supabaseClient)
-  const createSupabaseClient = vi.fn(() => ({
-    from,
-  }))
+  const createSupabaseClient = vi.fn(() => supabaseClient)
   const push = vi.fn()
   const useRouter = vi.fn(() => ({
     push,
@@ -144,7 +142,6 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/supabaseClient", () => ({
-  supabase: supabaseBrowserClient,
   createSupabaseBrowserClient: () => createSupabaseBrowserClientMock(),
   createSupabaseClient: () => createSupabaseClientMock(),
 }))
@@ -184,6 +181,8 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 
 describe("Dashboard page", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.test"
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key"
     usePathnameMock.mockReturnValue("/dashboard")
     pushMock.mockReset()
     useRouterMock.mockReset()
@@ -243,6 +242,8 @@ describe("Dashboard page", () => {
   })
 
   afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     vi.clearAllMocks()
   })
 
@@ -682,6 +683,8 @@ describe("Dashboard page", () => {
 
 describe("Dashboard layout", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.test"
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key"
     getSessionMock.mockReset()
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
@@ -691,6 +694,8 @@ describe("Dashboard layout", () => {
   })
 
   afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     vi.clearAllMocks()
   })
 

@@ -1,44 +1,37 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-const getSupabaseConfig = () => {
+type SupabaseConfig = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+}
+
+const readSupabaseConfig = (): SupabaseConfig | null => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!supabaseUrl) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is not defined")
-  }
-
-  if (!supabaseAnonKey) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined")
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null
   }
 
   return { supabaseUrl, supabaseAnonKey }
 }
 
-export const createSupabaseClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig()
+export const isSupabaseConfigured = () => readSupabaseConfig() !== null
+
+const createClient = () => {
+  const config = readSupabaseConfig()
+
+  if (!config) {
+    throw new Error("Supabase environment variables are not configured.")
+  }
+
   return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
+    supabaseUrl: config.supabaseUrl,
+    supabaseKey: config.supabaseAnonKey,
   })
 }
 
-export const createSupabaseBrowserClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig()
-  return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
-  })
-}
+export const createSupabaseClient = () => createClient()
 
-let supabaseInstance: ReturnType<typeof createClientComponentClient> | null = null
-
-export const supabase = new Proxy({} as ReturnType<typeof createClientComponentClient>, {
-  get(target, prop) {
-    if (!supabaseInstance) {
-      supabaseInstance = createSupabaseBrowserClient()
-    }
-    return supabaseInstance[prop as keyof typeof supabaseInstance]
-  },
-})
+export const createSupabaseBrowserClient = () => createClient()
 
