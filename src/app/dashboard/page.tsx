@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 import {
   DashboardSummary,
   DashboardSummarySkeleton,
-  type DashboardStats,
 } from "@/components/dashboard/dashboard-summary"
 import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
 import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboard/listening-history"
@@ -23,6 +22,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 import { ShareCardsDialog } from "@/components/dashboard/share-cards"
+import { getDashboardData, getAvailableTimeframes } from "@/lib/analytics-service"
+import type { TimeframeFilter as TimeframeFilterType } from "@/lib/analytics-types"
 
 import {
   TimeframeFilter,
@@ -31,13 +32,6 @@ import {
   type TimeframeValue,
   type TimeframeYearOption,
 } from "@/components/dashboard/timeframe-filter"
-
-type ListenSummaryRow = {
-  ms_played: number | null
-  artist: string | null
-  track: string | null
-  ts: string | null
-}
 
 type DashboardErrorState = "unauthorized" | "error" | null
 
@@ -451,47 +445,133 @@ const ALL_TIME_OPTION: TimeframeOption = {
   label: "All time",
 }
 
+type DashboardData = Extract<
+  Awaited<ReturnType<typeof getDashboardData>>,
+  { success: true }
+>["data"]
+
 export default function DashboardPage() {
-  const [listens, setListens] = useState<ListenSummaryRow[] | null>(null)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [errorState, setErrorState] = useState<DashboardErrorState>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
+  const [timeframeOptions, setTimeframeOptions] = useState<TimeframeOption[]>([
+    ALL_TIME_OPTION,
+  ])
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
+  const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+  })
+
+  // Fetch available timeframes on mount
+  useEffect(() => {
+    let active = true
+    const supabase = createSupabaseBrowserClient()
+
+    const fetchTimeframes = async () => {
+      const result = await getAvailableTimeframes(supabase)
+
+      if (!active) return
+
+      if (!result.success) {
+        const status = getPostgrestErrorStatus(result.error)
+        if (status === 401) {
+          setErrorState("unauthorized")
+        } else {
+          console.error(result.error)
+          setErrorState("error")
+        }
+        return
+      }
+
+      const yearSet = new Set<number>()
+      const monthMap = new Map<string, { year: number; month: number }>()
+
+      result.data.forEach((tf) => {
+        yearSet.add(tf.year)
+        const key = `${tf.year}-${String(tf.month).padStart(2, "0")}`
+        monthMap.set(key, { year: tf.year, month: tf.month })
+      })
+
+      const yearOptions: TimeframeYearOption[] = Array.from(yearSet)
+        .sort((a, b) => b - a)
+        .map((year) => ({
+          type: "year",
+          value: `year-${year}` as const,
+          label: year.toString(),
+          year,
+        }))
+
+      const monthOptions: TimeframeMonthOption[] = Array.from(monthMap.entries())
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([key, { year, month }]) => {
+          const date = new Date(Date.UTC(year, month - 1, 1))
+          return {
+            type: "month" as const,
+            value: `month-${year}-${String(month).padStart(2, "0")}` as const,
+            label: MONTH_LABEL_FORMATTER.format(date),
+            year,
+            month,
+          }
+        })
+
+      setTimeframeOptions([ALL_TIME_OPTION, ...yearOptions, ...monthOptions])
+    }
+
+    void fetchTimeframes()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const activeTimeframe = useMemo(
+    () => timeframeOptions.find((option) => option.value === selectedTimeframe),
+    [selectedTimeframe, timeframeOptions]
+  )
+
+  const timeframeFilter = useMemo((): TimeframeFilterType => {
+    if (!activeTimeframe || activeTimeframe.type === "all") {
+      return { type: "all" }
+    }
+    if (activeTimeframe.type === "year") {
+      return { type: "year", year: activeTimeframe.year }
+    }
+    return {
+      type: "month",
+      year: activeTimeframe.year,
+      month: activeTimeframe.month,
+    }
+  }, [activeTimeframe])
+
+  // Fetch dashboard data when timeframe changes
   useEffect(() => {
     let active = true
     const supabase = createSupabaseBrowserClient()
 
     const fetchData = async () => {
-      const { data, error } = await supabase
-        .from("listens")
-        .select("ms_played, artist, track, ts")
+      const result = await getDashboardData(supabase, timeframeFilter)
 
       if (!active) return
 
-      if (error) {
-        const status = getPostgrestErrorStatus(error)
-
+      if (!result.success) {
+        const status = getPostgrestErrorStatus(result.error)
         if (status === 401) {
           setErrorState("unauthorized")
         } else {
-          console.error(error)
+          console.error(result.error)
           setErrorState("error")
         }
-
-        setListens(null)
+        setDashboardData(null)
         return
       }
 
       setErrorState(null)
-
-      const fetchedListens = (data ?? [])
-        .map(toListenSummaryRow)
-        .filter((row): row is ListenSummaryRow => row !== null)
-
-      setListens(fetchedListens)
+      setDashboardData(result.data)
     }
 
     void fetchData()
@@ -499,111 +579,12 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [supabase])
-
-  const timeframeOptions = useMemo<TimeframeOption[]>(() => {
-    if (!listens || listens.length === 0) {
-      return [ALL_TIME_OPTION]
-    }
-
-    const yearSet = new Set<number>()
-    const monthSet = new Set<string>()
-
-    listens.forEach((listen) => {
-      if (!listen.ts) return
-      const tsDate = new Date(listen.ts)
-      if (Number.isNaN(tsDate.getTime())) return
-      const year = tsDate.getUTCFullYear()
-      yearSet.add(year)
-      const month = tsDate.getUTCMonth() + 1
-      monthSet.add(`${year}-${String(month).padStart(2, "0")}`)
-    })
-
-    const yearOptions: TimeframeYearOption[] = Array.from(yearSet)
-      .sort((a, b) => b - a)
-      .map((year) => ({
-        type: "year",
-        value: `year-${year}` as const,
-        label: year.toString(),
-        year,
-      }))
-
-    const monthOptions: TimeframeMonthOption[] = Array.from(monthSet)
-      .sort((a, b) => b.localeCompare(a))
-      .map((key) => {
-        const [yearStr, monthStr] = key.split("-")
-        const year = Number(yearStr)
-        const month = Number(monthStr)
-        const date = new Date(Date.UTC(year, month - 1, 1))
-        return {
-          type: "month" as const,
-          value: `month-${year}-${monthStr}` as const,
-          label: MONTH_LABEL_FORMATTER.format(date),
-          year,
-          month,
-        }
-      })
-
-    return [ALL_TIME_OPTION, ...yearOptions, ...monthOptions]
-  }, [listens])
-
-  useEffect(() => {
-    if (!timeframeOptions.some((option) => option.value === selectedTimeframe)) {
-      setSelectedTimeframe(ALL_TIME_OPTION.value)
-    }
-  }, [timeframeOptions, selectedTimeframe])
-
-  const activeTimeframe = useMemo(
-    () => timeframeOptions.find((option) => option.value === selectedTimeframe),
-    [selectedTimeframe, timeframeOptions]
-  )
-
-  const filteredListens = useMemo(() => {
-    if (!listens) {
-      return null
-    }
-
-    if (!activeTimeframe || activeTimeframe.type === "all") {
-      return listens
-    }
-
-    return listens.filter((listen) => {
-      if (!listen.ts) {
-        return false
-      }
-
-      const tsDate = new Date(listen.ts)
-      if (Number.isNaN(tsDate.getTime())) {
-        return false
-      }
-
-      const year = tsDate.getUTCFullYear()
-
-      if (activeTimeframe.type === "year") {
-        return year === activeTimeframe.year
-      }
-
-      const month = tsDate.getUTCMonth() + 1
-      return (
-        activeTimeframe.type === "month" &&
-        year === activeTimeframe.year &&
-        month === activeTimeframe.month
-      )
-    })
-  }, [activeTimeframe, listens])
-
-  const dashboardData = useMemo(() => {
-    if (!filteredListens) {
-      return null
-    }
-
-    return calculateDashboardData(filteredListens)
-  }, [filteredListens])
+  }, [timeframeFilter, supabase])
 
   const sectionMotion = useDashboardSectionTransition()
   const activeTimeframeKey = activeTimeframe?.value ?? "all"
   const timeframeLabel = activeTimeframe?.label ?? ALL_TIME_OPTION.label
-  const isLoadingListens = listens === null
+  const isLoadingData = dashboardData === null
   const hasShareableInsights = Boolean(
     dashboardData &&
       dashboardData.topArtists.length > 0 &&
@@ -631,7 +612,7 @@ export default function DashboardPage() {
             type="button"
             variant="outline"
             onClick={() => setIsShareDialogOpen(true)}
-            disabled={isLoadingListens || !hasShareableInsights}
+            disabled={isLoadingData || !hasShareableInsights}
           >
             Share cards
           </Button>
@@ -857,25 +838,14 @@ export default function DashboardPage() {
       </section>
       <section aria-label="Searchable listening history">
         <AnimatePresence mode="wait">
-          {filteredListens ? (
-            <motion.div
-              key={`listening-history-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-            >
-              <ListeningHistory listens={filteredListens} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`listening-history-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-            >
-              <ListeningHistorySkeleton />
-            </motion.div>
-          )}
+          <motion.div
+            key={`listening-history-${activeTimeframeKey}`}
+            initial={sectionMotion.initial}
+            animate={sectionMotion.animate}
+            exit={sectionMotion.exit}
+          >
+            <ListeningHistory timeframeFilter={timeframeFilter} />
+          </motion.div>
         </AnimatePresence>
       </section>
       <ShareCardsDialog

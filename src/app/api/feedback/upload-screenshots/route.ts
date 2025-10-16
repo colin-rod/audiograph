@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+import { captureServerException } from '@/lib/monitoring/sentry/server'
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const MAX_FILES = 5
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
@@ -70,11 +72,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate environment variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase configuration missing')
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Server configuration error: Supabase credentials not configured. Please contact the administrator.',
+        },
+        { status: 500 }
+      )
+    }
+
     // Create Supabase client
     const cookieStore = await cookies()
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabaseAnonKey,
       {
         cookies: {
           getAll() {
@@ -142,6 +159,9 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('Error uploading screenshots:', error)
+    void captureServerException(error, {
+      tags: { action: 'upload_feedback_screenshot' },
+    })
 
     return NextResponse.json(
       {

@@ -4,8 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AuthButtonGroup } from "@/components/auth/auth-button-group";
-import { ThemeProvider } from "@/components/providers/theme-provider";
-import { Toaster } from "@/components/providers/toaster";
+import { AppProviders } from "@/components/providers/app-providers";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 const geistSans = Geist({
@@ -32,10 +31,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
+        <AppProviders>
           <div
             className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
           >
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+            >
+              Skip to content
+            </a>
             <header className="border-b bg-background">
               <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
                 <Link className="text-base font-semibold" href="/">
@@ -51,11 +56,12 @@ export default function RootLayout({
                 </div>
               </div>
             </header>
-            <main className="flex-1">{children}</main>
+            <main id="main-content" className="flex-1">
+              {children}
+            </main>
             <FeedbackButton />
           </div>
-          <Toaster />
-        </ThemeProvider>
+        </AppProviders>
       </body>
     </html>
   );

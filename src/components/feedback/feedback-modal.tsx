@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect, useId, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Bug, Sparkles, Palette, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+
+import { capturePostHogEvent } from '@/lib/monitoring/posthog/client'
 import { Button } from '@/components/ui/button'
 import {
   FeedbackType,
@@ -12,6 +13,10 @@ import {
   type FeedbackFormData,
   type FeedbackResponse,
 } from '@/lib/types/feedback'
+import { cn } from '@/lib/utils'
+
+const SUPABASE_CONFIG_ERROR_MESSAGE =
+  'Supabase environment variables are not configured. Feedback submissions are currently unavailable. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
 
 interface FeedbackModalProps {
   open: boolean
@@ -37,6 +42,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   const [screenshotPreviews, setScreenshotPreviews] = useState<string[]>([])
   const [mounted, setMounted] = useState(false)
 
+  const isSupabaseConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  )
+  const supabaseConfigError = isSupabaseConfigured ? null : SUPABASE_CONFIG_ERROR_MESSAGE
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -51,6 +61,10 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
    * Get current user email if authenticated
    */
   const getUserEmail = async (): Promise<string | undefined> => {
+    if (!isSupabaseConfigured) {
+      console.error(SUPABASE_CONFIG_ERROR_MESSAGE)
+      return undefined
+    }
     try {
       // For client-side, we need to use the browser client
       const { createBrowserClient } = await import('@supabase/ssr')
@@ -155,6 +169,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
     e.preventDefault()
     setErrors({})
 
+    if (supabaseConfigError) {
+      toast.error(supabaseConfigError)
+      return
+    }
+
     // Validate form data
     const validation = feedbackFormSchema.safeParse(formData)
     if (!validation.success) {
@@ -222,6 +241,10 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
       // Success!
       toast.success(data.message || 'Thank you for your feedback!')
+      capturePostHogEvent('feedback_submitted', {
+        type: formData.type,
+        hasScreenshots: screenshotUrls.length > 0,
+      })
 
       // Reset form and close modal
       screenshotPreviews.forEach(url => URL.revokeObjectURL(url))
@@ -238,6 +261,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           ? error.message
           : 'Failed to submit feedback. Please try again.'
       )
+      capturePostHogEvent('feedback_submission_failed', {
+        type: formData.type,
+        hasScreenshots: Boolean(formData.screenshots?.length),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -305,6 +333,12 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {supabaseConfigError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {supabaseConfigError}
+            </div>
+          ) : null}
+
           {/* Feedback Type */}
           <div>
             <label className="block text-sm font-medium mb-3">
@@ -316,7 +350,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
                   key={value}
                   type="button"
                   onClick={() => setFormData({ ...formData, type: value })}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || Boolean(supabaseConfigError)}
                   className={cn(
                     'flex flex-col items-center justify-center min-h-[80px] px-3 py-3 text-xs border rounded-lg',
                     'hover:bg-accent transition-all duration-200',
@@ -352,7 +386,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               onPaste={handlePaste}
               placeholder="Please describe your feedback in detail... (Paste screenshots with Ctrl/Cmd+V)"
               rows={6}
-              disabled={isSubmitting}
+              disabled={isSubmitting || Boolean(supabaseConfigError)}
               className={cn(
                 'w-full rounded-md border bg-background px-3 py-2 text-sm',
                 'placeholder:text-muted-foreground',
@@ -380,7 +414,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isSubmitting || (formData.screenshots?.length || 0) >= 5}
+                disabled={
+                  isSubmitting ||
+                  Boolean(supabaseConfigError) ||
+                  (formData.screenshots?.length || 0) >= 5
+                }
                 className="text-sm text-primary hover:text-primary/80 disabled:text-muted-foreground disabled:cursor-not-allowed"
               >
                 + Add Screenshot
@@ -401,7 +439,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
                     <button
                       type="button"
                       onClick={() => removeScreenshot(index)}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || Boolean(supabaseConfigError)}
                       className="absolute top-1 right-1 bg-destructive hover:bg-destructive/90 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md disabled:opacity-50"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -424,7 +462,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               multiple
               onChange={handleFileSelect}
               className="hidden"
-              disabled={isSubmitting}
+              disabled={isSubmitting || Boolean(supabaseConfigError)}
             />
 
             <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
@@ -453,7 +491,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="default" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              variant="default"
+              disabled={isSubmitting || Boolean(supabaseConfigError)}
+            >
               {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
             </Button>
           </div>
