@@ -38,6 +38,29 @@ export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
   const supabase = createSupabaseServerClient()
+  if (!supabase) {
+    return (
+      <DashboardShell
+        sidebar={sidebarContent}
+        header={headerContent}
+        headerActions={
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <AuthButtonGroup orientation="horizontal" />
+          </div>
+        }
+      >
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          Supabase environment variables are not configured. Set{' '}
+          <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code>{' '}
+          and{' '}
+          <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{' '}
+          to enable the dashboard.
+        </div>
+        {children}
+      </DashboardShell>
+    )
+  }
   const {
     data: { session },
   } = await supabase.auth.getSession()

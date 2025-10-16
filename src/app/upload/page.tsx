@@ -1,5 +1,7 @@
 'use client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 import {
   parseSpotifyHistory,
@@ -15,7 +17,110 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
+type SpotifyHistoryEntry = {
+  endTime?: string | null
+  ts?: string | null
+  master_metadata_album_artist_name?: string | null
+  artistName?: string | null
+  master_metadata_track_name?: string | null
+  trackName?: string | null
+  msPlayed?: number | null
+  ms_played?: number | null
+}
+
+type ListenInsert = {
+  ts: Date
+  artist: string | null
+  track: string | null
+  ms_played: number | null
+  user_id: string
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const toSpotifyHistoryEntry = (value: unknown): SpotifyHistoryEntry | null => {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const endTime =
+    typeof value['endTime'] === 'string' ? (value['endTime'] as string) : null
+  const ts =
+    typeof value['ts'] === 'string' ? (value['ts'] as string) : null
+  const albumArtist =
+    typeof value['master_metadata_album_artist_name'] === 'string'
+      ? (value['master_metadata_album_artist_name'] as string)
+      : null
+  const artistName =
+    typeof value['artistName'] === 'string'
+      ? (value['artistName'] as string)
+      : null
+  const trackName =
+    typeof value['master_metadata_track_name'] === 'string'
+      ? (value['master_metadata_track_name'] as string)
+      : null
+  const fallbackTrackName =
+    typeof value['trackName'] === 'string'
+      ? (value['trackName'] as string)
+      : null
+  const msPlayed =
+    typeof value['msPlayed'] === 'number'
+      ? (value['msPlayed'] as number)
+      : null
+  const msPlayedSnake =
+    typeof value['ms_played'] === 'number'
+      ? (value['ms_played'] as number)
+      : null
+
+  const entry: SpotifyHistoryEntry = {
+    endTime,
+    ts,
+    master_metadata_album_artist_name: albumArtist,
+    artistName,
+    master_metadata_track_name: trackName,
+    trackName: fallbackTrackName,
+    msPlayed,
+    ms_played: msPlayedSnake,
+  }
+
+  return entry
+}
+
+const toListenInsert = (entry: SpotifyHistoryEntry, userId: string): ListenInsert | null => {
+  const timestamp = entry.endTime ?? entry.ts
+  if (!timestamp) {
+    return null
+  }
+
+  const parsedDate = new Date(timestamp)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null
+  }
+
+  const msPlayed = entry.msPlayed ?? entry.ms_played ?? null
+  const artist =
+    entry.master_metadata_album_artist_name ?? entry.artistName ?? null
+  const track =
+    entry.master_metadata_track_name ?? entry.trackName ?? null
+
+  return {
+    ts: parsedDate,
+    artist,
+    track,
+    ms_played: msPlayed,
+    user_id: userId,
+  }
+}
+
+type StatusState = {
+  state: 'idle' | 'validating' | 'uploading' | 'resetting' | 'success' | 'error'
+  message: string
+}
+
 const BATCH_SIZE = 500
+const SUPABASE_CONFIG_ERROR_MESSAGE =
+  'Supabase environment variables are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable uploads.'
 
 const formatFileSize = (size: number) => {
   if (size >= 1024 * 1024) {
@@ -129,9 +234,52 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error(error)
+      return null
+    }
+  }, [])
+
+  const [status, setStatus] = useState<StatusState>(() =>
+    supabase
+      ? {
+          state: 'idle',
+          message: 'Select a Spotify listening history JSON file to begin.',
+        }
+      : {
+          state: 'error',
+          message: SUPABASE_CONFIG_ERROR_MESSAGE,
+        },
+  )
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Supabase configuration is missing.'
+      console.warn(message)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not configured. Please contact support.',
+      })
+    }
+  }, [supabase])
   const supabase = useMemo(() => createSupabaseClient(), [])
   const {
     status,
@@ -145,6 +293,11 @@ export default function UploadPage() {
 
   const resetToError = useCallback(
     (message: string) => {
+  const router = useRouter()
+  const hasRedirectedRef = useRef(false)
+
+  const resetState = useCallback(
+    (message: StatusState['message'], state: StatusState['state']) => {
       setProgress(0)
       setSelectedFile(null)
       setError(message)
@@ -153,8 +306,12 @@ export default function UploadPage() {
   )
 
   const handleResetRequest = useCallback(() => {
+    if (!supabase) {
+      setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+      return
+    }
     setIsResetDialogOpen(true)
-  }, [])
+  }, [supabase])
 
   const handleCancelReset = useCallback(() => {
     setIsResetDialogOpen(false)
@@ -162,12 +319,34 @@ export default function UploadPage() {
 
   const handleConfirmReset = useCallback(async () => {
     setIsResetDialogOpen(false)
+    if (!supabase) {
+      setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+      return
+    }
     setProgress(0)
     setSelectedFile(null)
     setResetting('Deleting existing listens from Supabase…')
 
     try {
+      if (!supabase) {
+        setStatus({
+          state: 'error',
+          message: 'Supabase is not configured. Please contact support.',
+      // Get the current user ID
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        setStatus({
+          state: 'error',
+          message: 'You must be signed in to delete data.',
+        })
+        return
+      }
+
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
+      const { error } = await supabase
+        .from('listens')
+        .delete()
+        .eq('user_id', userData.user.id)
 
       if (error) {
         console.error(error)
@@ -184,9 +363,29 @@ export default function UploadPage() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      hasRedirectedRef.current = false
+      if (!supabase) {
+        setSelectedFile(null)
+        setProgress(0)
+        setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+        return
+      }
+
       setSelectedFile(file)
       setProgress(0)
       setValidating('Validating file…')
+
+      if (!supabase) {
+        resetState('Supabase is not configured. Please contact support.', 'error')
+        return
+      }
+      // Get the current user ID
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        resetState('You must be signed in to upload data.', 'error')
+        return
+      }
+      const userId = userData.user.id
 
       if (!file.name.toLowerCase().endsWith('.json')) {
         resetToError('Only JSON files are supported.')
@@ -224,6 +423,27 @@ export default function UploadPage() {
         if (error instanceof SpotifyHistoryParseError) {
           resetToError(error.message)
           return
+      if (!Array.isArray(parsed)) {
+        resetState('Expected an array of listening records in the JSON file.', 'error')
+        return
+      }
+
+      const parsedRows = parsed
+        .map(toSpotifyHistoryEntry)
+        .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
+        .map((entry) => toListenInsert(entry, userId))
+        .filter((row): row is ListenInsert => row !== null)
+
+      const uniqueRows = new Map<string, ListenInsert>()
+      for (const row of parsedRows) {
+        const key = [
+          row.ts.toISOString(),
+          row.track ?? '',
+          row.artist ?? '',
+          row.ms_played === null ? '' : row.ms_played.toString(),
+        ].join('|')
+        if (!uniqueRows.has(key)) {
+          uniqueRows.set(key, row)
         }
 
         console.error(error)
@@ -253,6 +473,16 @@ export default function UploadPage() {
       setSuccess(`Successfully uploaded ${rows.length} listening records.`)
     },
     [resetToError, setSuccess, setUploading, setValidating, supabase],
+      setStatus({
+        state: 'success',
+        message: `Successfully uploaded ${rows.length} listening records.`,
+      })
+      if (!hasRedirectedRef.current) {
+        hasRedirectedRef.current = true
+        router.push('/dashboard')
+      }
+    },
+    [resetState, router, supabase],
   )
 
 
@@ -263,18 +493,53 @@ export default function UploadPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           Drag in the JSON exports downloaded from Spotify to add them to Supabase.
         </p>
+        <details className="mt-4 text-left text-sm text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">
+            Need help downloading your Spotify data?
+          </summary>
+          <ol className="mt-2 list-decimal space-y-2 pl-5">
+            <li>
+              Visit Spotify&apos;s{' '}
+              <a
+                className="underline"
+                href="https://www.spotify.com/account/privacy/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Privacy Settings
+              </a>{' '}
+              and sign in.
+            </li>
+            <li>Select <strong>Download your data</strong>, then choose the <strong>Extended streaming history</strong> option.</li>
+            <li>Submit the request and wait for Spotify&apos;s email confirming your archive is ready.</li>
+            <li>
+              Download the ZIP from Spotify&apos;s email, extract it, and drag the <code>StreamingHistory*.json</code>{' '}
+              files into this uploader.
+            </li>
+          </ol>
+          <p className="mt-2">
+            Spotify can take a few days to prepare the archive, so keep an eye on your inbox.
+          </p>
+        </details>
       </div>
       <UploadDropzone
         onFileAccepted={handleFile}
         isBusy={isBusy}
+        isBusy={
+          !supabase ||
+          status.state === 'validating' ||
+          status.state === 'uploading' ||
+          status.state === 'resetting'
+        }
         selectedFile={selectedFile}
       />
       <div className="flex justify-center">
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           onClick={handleResetRequest}
           disabled={
+            !supabase ||
             status.state === 'validating' ||
             status.state === 'uploading' ||
             status.state === 'resetting'

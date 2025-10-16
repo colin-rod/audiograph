@@ -284,6 +284,12 @@ describe("Dashboard page", () => {
       screen.getByTestId("listening-clock-heatmap-skeleton")
     ).toBeInTheDocument()
     expect(
+      screen.getByTestId("weekly-cadence-chart-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("listening-streak-card-skeleton")
+    ).toBeInTheDocument()
+    expect(
       screen.getByTestId("listening-history-skeleton")
     ).toBeInTheDocument()
 
@@ -299,6 +305,12 @@ describe("Dashboard page", () => {
 
     expect(
       screen.queryByTestId("dashboard-summary-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("weekly-cadence-chart-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("listening-streak-card-skeleton")
     ).not.toBeInTheDocument()
     expect(redirectMock).not.toHaveBeenCalled()
   })
@@ -375,6 +387,12 @@ describe("Dashboard page", () => {
       screen.queryByTestId("listening-clock-heatmap-skeleton")
     ).not.toBeInTheDocument()
     expect(
+      screen.queryByTestId("weekly-cadence-chart-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("listening-streak-card-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
       screen.queryByTestId("listening-history-skeleton")
     ).not.toBeInTheDocument()
     expect(
@@ -413,6 +431,22 @@ describe("Dashboard page", () => {
     expect(screen.getAllByText(/Jan\s*2024/)).not.toHaveLength(0)
     expect(screen.getAllByText(/Dec\s*2023/)).not.toHaveLength(0)
 
+    const weeklyCardHeading = screen.getByRole("heading", {
+      name: /weekly cadence/i,
+    })
+    expect(weeklyCardHeading).toBeInTheDocument()
+    const weeklyCard = weeklyCardHeading.closest("[data-slot='card']")
+    expect(weeklyCard).not.toBeNull()
+    if (weeklyCard instanceof HTMLElement) {
+      const weeklyQueries = within(weeklyCard)
+      expect(
+        weeklyQueries.getByText(/Jan 15 – Jan 21: 1.8 hrs/i)
+      ).toBeInTheDocument()
+      expect(
+        weeklyQueries.getByText(/Dec 25 – Dec 31: 0.7 hrs/i)
+      ).toBeInTheDocument()
+    }
+
     expect(
       screen.getByRole("heading", { name: /listening clock/i })
     ).toBeInTheDocument()
@@ -422,6 +456,19 @@ describe("Dashboard page", () => {
     expect(
       screen.getByLabelText(/Saturday at 22:00 — 0.5 hrs/i)
     ).toBeInTheDocument()
+
+    const streakCardHeading = screen.getByRole("heading", {
+      name: /listening streaks/i,
+    })
+    expect(streakCardHeading).toBeInTheDocument()
+    const streakCard = streakCardHeading.closest("[data-slot='card']")
+    expect(streakCard).not.toBeNull()
+    if (streakCard instanceof HTMLElement) {
+      const streakQueries = within(streakCard)
+      expect(streakQueries.getByLabelText(/2 day streak/i)).toBeInTheDocument()
+      expect(streakQueries.getByText(/Jan 20, 2024/i)).toBeInTheDocument()
+      expect(streakQueries.getByText(/Jan 21, 2024/i)).toBeInTheDocument()
+    }
   })
 
   it("filters dashboard metrics when timeframe changes", async () => {
