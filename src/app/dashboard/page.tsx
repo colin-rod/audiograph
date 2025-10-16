@@ -470,9 +470,10 @@ const calculateYearOverYearDeltas = (
   listens: ListenSummaryRow[]
 ): YearOverYearDelta[] => {
   const aggregated = aggregateListensByYear(listens)
+  const aggregatedByYear = new Map(aggregated.map((entry) => [entry.year, entry]))
 
-  return aggregated.map((current, index) => {
-    const previous = aggregated[index - 1]
+  return aggregated.map((current) => {
+    const previous = aggregatedByYear.get(current.year - 1)
 
     const hours = Number((current.ms / MS_PER_HOUR).toFixed(1))
     const hoursDelta = previous
