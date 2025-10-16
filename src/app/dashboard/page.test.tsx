@@ -16,15 +16,23 @@ type SupabaseSelectResult = {
   error: Error | null
 }
 
-const { usePathnameMock, selectMock, fromMock } = vi.hoisted(() => {
+const { createSupabaseClientMock, usePathnameMock, selectMock, fromMock } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
     data: [],
     error: null,
   }))
   const from = vi.fn(() => ({ select }))
+  const createSupabaseClient = vi.fn(() => ({
+    from,
+  }))
 
-  return { usePathnameMock: pathname, selectMock: select, fromMock: from }
+  return {
+    createSupabaseClientMock: createSupabaseClient,
+    usePathnameMock: pathname,
+    selectMock: select,
+    fromMock: from,
+  }
 })
 
 type LinkProps = Omit<ComponentProps<"a">, "href"> & {
@@ -51,9 +59,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/supabaseClient", () => ({
-  supabase: {
-    from: fromMock,
-  },
+  createSupabaseClient: createSupabaseClientMock,
 }))
 
 import DashboardLayout from "./layout"
@@ -69,6 +75,7 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 describe("Dashboard page", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/dashboard")
+    createSupabaseClientMock.mockClear()
     selectMock.mockClear()
     fromMock.mockClear()
   })

@@ -1,6 +1,6 @@
 'use client'
-import { useCallback, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { createSupabaseClient } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -222,12 +222,16 @@ export default function UploadPage() {
   })
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const supabase = useMemo(() => createSupabaseClient(), [])
 
-  const resetState = (message: StatusState['message'], state: StatusState['state']) => {
-    setProgress(0)
-    setSelectedFile(null)
-    setStatus({ state, message })
-  }
+  const resetState = useCallback(
+    (message: StatusState['message'], state: StatusState['state']) => {
+      setProgress(0)
+      setSelectedFile(null)
+      setStatus({ state, message })
+    },
+    [],
+  )
 
   const handleReset = useCallback(async () => {
     const confirmed = window.confirm(
@@ -269,7 +273,7 @@ export default function UploadPage() {
           'An unexpected error occurred while deleting data. Please try again.',
       })
     }
-  }, [])
+  }, [supabase])
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -370,7 +374,7 @@ export default function UploadPage() {
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
     },
-    [],
+    [resetState, supabase],
   )
 
 
