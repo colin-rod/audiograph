@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 
 export const dynamic = "force-dynamic"
@@ -246,6 +247,9 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const supabase = useMemo(() => createSupabaseClient(), [])
+  const router = useRouter()
+  const hasRedirectedRef = useRef(false)
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
@@ -322,6 +326,7 @@ export default function UploadPage() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      hasRedirectedRef.current = false
       if (!supabase) {
         setSelectedFile(null)
         setProgress(0)
@@ -433,8 +438,12 @@ export default function UploadPage() {
         state: 'success',
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
+      if (!hasRedirectedRef.current) {
+        hasRedirectedRef.current = true
+        router.push('/dashboard')
+      }
     },
-    [resetState, supabase],
+    [resetState, router, supabase],
   )
 
 
