@@ -5,6 +5,8 @@ import "./globals.css";
 
 import { AuthButtonGroup } from "@/components/auth/auth-button-group";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Toaster } from "@/components/providers/toaster";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,7 +52,9 @@ export default function RootLayout({
               </div>
             </header>
             <main className="flex-1">{children}</main>
+            <FeedbackButton />
           </div>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
