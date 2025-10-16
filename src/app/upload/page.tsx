@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 
 export const dynamic = "force-dynamic"
@@ -226,7 +226,35 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const missingSupabaseMessage =
+    'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error(error)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus((previous) => {
+        if (previous.message === missingSupabaseMessage && previous.state === 'error') {
+          return previous
+        }
+
+        return {
+          state: 'error',
+          message: missingSupabaseMessage,
+        }
+      })
+    }
+  }, [missingSupabaseMessage, supabase])
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
@@ -246,6 +274,14 @@ export default function UploadPage() {
   }, [])
 
   const handleConfirmReset = useCallback(async () => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: missingSupabaseMessage,
+      })
+      return
+    }
+
     setIsResetDialogOpen(false)
     setProgress(0)
     setSelectedFile(null)
@@ -282,6 +318,14 @@ export default function UploadPage() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (!supabase) {
+        setStatus({
+          state: 'error',
+          message: missingSupabaseMessage,
+        })
+        return
+      }
+
       setSelectedFile(file)
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
