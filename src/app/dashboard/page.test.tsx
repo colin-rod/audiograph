@@ -32,8 +32,8 @@ const {
   createSupabaseBrowserClientMock,
   getSessionMock,
   redirectMock,
+  createSupabaseClientMock,
 } = vi.hoisted(() => {
-const { createSupabaseClientMock, usePathnameMock, selectMock, fromMock } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
     data: [],
@@ -42,6 +42,9 @@ const { createSupabaseClientMock, usePathnameMock, selectMock, fromMock } = vi.h
   const from = vi.fn(() => ({ select }))
   const supabaseClient = { from }
   const createClient = vi.fn(() => supabaseClient)
+  const createSupabaseClient = vi.fn(() => ({
+    from,
+  }))
   const getSession = vi.fn(
     async (): Promise<{
       data: { session: { user: { id: string } } | null }
@@ -61,15 +64,7 @@ const { createSupabaseClientMock, usePathnameMock, selectMock, fromMock } = vi.h
     createSupabaseBrowserClientMock: createClient,
     getSessionMock: getSession,
     redirectMock: redirect,
-  const createSupabaseClient = vi.fn(() => ({
-    from,
-  }))
-
-  return {
     createSupabaseClientMock: createSupabaseClient,
-    usePathnameMock: pathname,
-    selectMock: select,
-    fromMock: from,
   }
 })
 
