@@ -464,7 +464,7 @@ export default function UploadPage() {
       <div className="flex justify-center">
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           onClick={handleResetRequest}
           disabled={
             !supabase ||
