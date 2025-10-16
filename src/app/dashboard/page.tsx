@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 
+export const dynamic = "force-dynamic"
+
 import {
   DashboardSummary,
   DashboardSummarySkeleton,
