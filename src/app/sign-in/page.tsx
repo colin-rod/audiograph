@@ -4,6 +4,8 @@ import { FormEvent, Suspense, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
+export const dynamic = "force-dynamic"
+
 import { Button } from "@/components/ui/button"
 import {
   Card,

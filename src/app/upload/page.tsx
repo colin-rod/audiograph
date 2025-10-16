@@ -1,6 +1,8 @@
 'use client'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createSupabaseClient } from '@/lib/supabaseClient'
+
+export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
