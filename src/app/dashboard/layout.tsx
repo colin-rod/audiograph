@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 
+import { AuthButtonGroup } from "@/components/auth/auth-button-group"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { SidebarNav, sidebarNavItems } from "@/components/dashboard/sidebar-nav"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
@@ -36,7 +37,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     <DashboardShell
       sidebar={sidebarContent}
       header={headerContent}
-      headerActions={<ThemeToggle />}
+      headerActions={
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <AuthButtonGroup orientation="horizontal" />
+        </div>
+      }
     >
       {children}
     </DashboardShell>
