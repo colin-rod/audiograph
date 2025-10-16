@@ -30,17 +30,20 @@ const {
   pushMock,
   selectMock,
   fromMock,
-  supabaseBrowserClient,
-  createSupabaseBrowserClientMock,
+  supabaseClientInstance,
   getSessionMock,
   redirectMock,
   createSupabaseClientMock,
+  createSupabaseServerClientMock,
+  createSupabaseRouteHandlerClientMock,
   getUserMock,
   onAuthStateChangeMock,
   unsubscribeMock,
   useShareCardExportMock,
   exportCardMock,
   resetShareCardExportMock,
+  isSupabaseConfiguredMock,
+  ensureSupabaseConfigMock,
 } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
@@ -67,10 +70,7 @@ const {
       onAuthStateChange,
     },
   }
-  const createClient = vi.fn(() => supabaseClient)
-  const createSupabaseClient = vi.fn(() => ({
-    from,
-  }))
+  const createSupabaseClient = vi.fn(() => supabaseClient)
   const push = vi.fn()
   const useRouter = vi.fn(() => ({
     push,
@@ -85,6 +85,21 @@ const {
     })
   )
   const redirect = vi.fn()
+  const createSupabaseServerClient = vi.fn(() => ({
+    auth: {
+      getSession,
+    },
+  }))
+  const createSupabaseRouteHandlerClient = vi.fn(() => ({
+    auth: {
+      getSession,
+    },
+  }))
+  const isSupabaseConfigured = vi.fn(() => true)
+  const ensureSupabaseConfig = vi.fn(() => ({
+    supabaseUrl: "https://supabase.test",
+    supabaseAnonKey: "anon-key",
+  }))
   const exportCard = vi.fn<
     (args: { node: HTMLElement | null; filename: string; format: "png" | "svg" }) => Promise<void>
   >()
@@ -104,17 +119,20 @@ const {
     pushMock: push,
     selectMock: select,
     fromMock: from,
-    supabaseBrowserClient: supabaseClient,
-    createSupabaseBrowserClientMock: createClient,
+    supabaseClientInstance: supabaseClient,
     getSessionMock: getSession,
     redirectMock: redirect,
     createSupabaseClientMock: createSupabaseClient,
+    createSupabaseServerClientMock: createSupabaseServerClient,
+    createSupabaseRouteHandlerClientMock: createSupabaseRouteHandlerClient,
     getUserMock: getUser,
     onAuthStateChangeMock: onAuthStateChange,
     unsubscribeMock: unsubscribe,
     useShareCardExportMock: useShareCardExport,
     exportCardMock: exportCard,
     resetShareCardExportMock: resetExport,
+    isSupabaseConfiguredMock: isSupabaseConfigured,
+    ensureSupabaseConfigMock: ensureSupabaseConfig,
   }
 })
 
@@ -144,18 +162,14 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/supabaseClient", () => ({
-  supabase: supabaseBrowserClient,
-  createSupabaseBrowserClient: () => createSupabaseBrowserClientMock(),
   createSupabaseClient: () => createSupabaseClientMock(),
+  isSupabaseConfigured: () => isSupabaseConfiguredMock(),
+  ensureSupabaseConfig: () => ensureSupabaseConfigMock(),
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
-  createSupabaseServerClient: () => ({
-    auth: {
-      getSession: () => getSessionMock(),
-    },
-  }),
-  createSupabaseClient: createSupabaseClientMock,
+  createSupabaseServerClient: () => createSupabaseServerClientMock(),
+  createSupabaseRouteHandlerClient: () => createSupabaseRouteHandlerClientMock(),
 }))
 
 vi.mock("@/components/dashboard/share-cards/use-share-card-export", () => ({
@@ -184,6 +198,8 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 
 describe("Dashboard page", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.test"
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key"
     usePathnameMock.mockReturnValue("/dashboard")
     pushMock.mockReset()
     useRouterMock.mockReset()
@@ -216,9 +232,6 @@ describe("Dashboard page", () => {
       },
     }))
 
-    createSupabaseBrowserClientMock.mockReset()
-    createSupabaseBrowserClientMock.mockImplementation(() => supabaseBrowserClient)
-
     getSessionMock.mockReset()
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
@@ -226,6 +239,27 @@ describe("Dashboard page", () => {
     })
 
     redirectMock.mockReset()
+    createSupabaseClientMock.mockReset()
+    createSupabaseClientMock.mockImplementation(() => supabaseClientInstance)
+    createSupabaseServerClientMock.mockReset()
+    createSupabaseServerClientMock.mockImplementation(() => ({
+      auth: {
+        getSession: getSessionMock,
+      },
+    }))
+    createSupabaseRouteHandlerClientMock.mockReset()
+    createSupabaseRouteHandlerClientMock.mockImplementation(() => ({
+      auth: {
+        getSession: getSessionMock,
+      },
+    }))
+    isSupabaseConfiguredMock.mockReset()
+    isSupabaseConfiguredMock.mockReturnValue(true)
+    ensureSupabaseConfigMock.mockReset()
+    ensureSupabaseConfigMock.mockReturnValue({
+      supabaseUrl: "https://supabase.test",
+      supabaseAnonKey: "anon-key",
+    })
     createSupabaseClientMock.mockClear()
     selectMock.mockClear()
     fromMock.mockClear()
@@ -243,6 +277,8 @@ describe("Dashboard page", () => {
   })
 
   afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     vi.clearAllMocks()
   })
 
@@ -682,15 +718,32 @@ describe("Dashboard page", () => {
 
 describe("Dashboard layout", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.test"
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key"
     getSessionMock.mockReset()
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
       error: null,
     })
     redirectMock.mockReset()
+    createSupabaseServerClientMock.mockReset()
+    createSupabaseServerClientMock.mockImplementation(() => ({
+      auth: {
+        getSession: getSessionMock,
+      },
+    }))
+    isSupabaseConfiguredMock.mockReset()
+    isSupabaseConfiguredMock.mockReturnValue(true)
+    ensureSupabaseConfigMock.mockReset()
+    ensureSupabaseConfigMock.mockReturnValue({
+      supabaseUrl: "https://supabase.test",
+      supabaseAnonKey: "anon-key",
+    })
   })
 
   afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     vi.clearAllMocks()
   })
 

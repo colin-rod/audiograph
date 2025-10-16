@@ -4,24 +4,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UploadPage from "./page";
 
-const { createSupabaseClientMock, fromMock, deleteMock, notMock } = vi.hoisted(() => {
-  const localNotMock = vi.fn();
-  const localDeleteMock = vi.fn(() => ({ not: localNotMock }));
-  const localFromMock = vi.fn(() => ({ delete: localDeleteMock }));
-  const localCreateSupabaseClientMock = vi.fn(() => ({
-    from: localFromMock,
-  }));
+const { createSupabaseClientMock, fromMock, deleteMock, notMock, isSupabaseConfiguredMock } =
+  vi.hoisted(() => {
+    const localNotMock = vi.fn();
+    const localDeleteMock = vi.fn(() => ({ not: localNotMock }));
+    const localFromMock = vi.fn(() => ({ delete: localDeleteMock }));
+    const localCreateSupabaseClientMock = vi.fn(() => ({
+      from: localFromMock,
+    }));
+    const localIsSupabaseConfiguredMock = vi.fn(() => true);
 
-  return {
-    createSupabaseClientMock: localCreateSupabaseClientMock,
-    fromMock: localFromMock,
-    deleteMock: localDeleteMock,
-    notMock: localNotMock,
-  };
-});
+    return {
+      createSupabaseClientMock: localCreateSupabaseClientMock,
+      fromMock: localFromMock,
+      deleteMock: localDeleteMock,
+      notMock: localNotMock,
+      isSupabaseConfiguredMock: localIsSupabaseConfiguredMock,
+    };
+  });
 
 vi.mock("@/lib/supabaseClient", () => ({
   createSupabaseClient: createSupabaseClientMock,
+  isSupabaseConfigured: () => isSupabaseConfiguredMock(),
 }));
 
 describe("UploadPage reset controls", () => {
@@ -31,6 +35,8 @@ describe("UploadPage reset controls", () => {
     deleteMock.mockClear();
     notMock.mockClear();
     notMock.mockResolvedValue({ error: null });
+    isSupabaseConfiguredMock.mockClear();
+    isSupabaseConfiguredMock.mockReturnValue(true);
   });
 
   it("confirms with the user and deletes listens on approval", async () => {
@@ -78,7 +84,7 @@ describe("UploadPage reset controls", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     expect(notMock).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Select a Spotify listening history JSON file to begin."),
+      screen.getByText("Select a Spotify listening history JSON or ZIP export to begin."),
     ).toBeInTheDocument();
 
     await waitFor(() =>

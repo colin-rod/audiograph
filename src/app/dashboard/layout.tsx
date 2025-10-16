@@ -4,6 +4,7 @@ import { AuthButtonGroup } from "@/components/auth/auth-button-group"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { SidebarNav, sidebarNavItems } from "@/components/dashboard/sidebar-nav"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { isSupabaseConfigured } from "@/lib/supabaseClient"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
@@ -34,10 +35,42 @@ const headerContent = (
   </div>
 )
 
+const renderConfigurationNotice = () => (
+  <DashboardShell
+    sidebar={sidebarContent}
+    header={headerContent}
+    headerActions={
+      <div className="flex items-center gap-3">
+        <ThemeToggle />
+      </div>
+    }
+  >
+    <div className="rounded-lg border border-dashed p-8 text-center">
+      <h2 className="text-xl font-semibold">Supabase is not configured</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable the dashboard.
+      </p>
+    </div>
+  </DashboardShell>
+)
+
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
-  const supabase = createSupabaseServerClient()
+  if (!isSupabaseConfigured()) {
+    console.error("Supabase environment variables are not configured.")
+    return renderConfigurationNotice()
+  }
+
+  let supabase
+
+  try {
+    supabase = createSupabaseServerClient()
+  } catch (error) {
+    console.error("Failed to initialize the Supabase server client.", error)
+    return renderConfigurationNotice()
+  }
+
   const {
     data: { session },
   } = await supabase.auth.getSession()

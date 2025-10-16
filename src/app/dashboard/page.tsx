@@ -17,8 +17,7 @@ import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { Button } from "@/components/ui/button"
-import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
-import { createSupabaseClient } from "@/lib/supabaseClient"
+import { createSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 import { ShareCardsDialog } from "@/components/dashboard/share-cards"
 
@@ -325,18 +324,43 @@ export default function DashboardPage() {
     ALL_TIME_OPTION.value
   )
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const supabase = useMemo<ReturnType<typeof createSupabaseClient> | null>(() => {
+    if (typeof window === "undefined") {
+      return null
+    }
+
+    if (!isSupabaseConfigured()) {
+      console.error("Supabase environment variables are not configured.")
+      return null
+    }
+
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error("Failed to initialize the Supabase client.", error)
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
-    const supabase = createSupabaseBrowserClient()
+
+    if (!supabase) {
+      setErrorState("error")
+      setListens(null)
+      return () => {
+        active = false
+      }
+    }
 
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("listens")
         .select("ms_played, artist, track, ts")
 
-      if (!active) return
+      if (!active) {
+        return
+      }
 
       if (error) {
         const status = getPostgrestErrorStatus(error)
