@@ -6,6 +6,8 @@ import "./globals.css";
 import { AuthButtonGroup } from "@/components/auth/auth-button-group";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "@/components/providers/toaster";
+import { PostHogProvider } from "@/components/providers/posthog-provider";
+import { SentryProvider } from "@/components/providers/sentry-provider";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 const geistSans = Geist({
@@ -32,30 +34,34 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          <div
-            className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
-          >
-            <header className="border-b bg-background">
-              <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
-                <Link className="text-base font-semibold" href="/">
-                  Audiograph
-                </Link>
-                <div className="flex items-center gap-6">
-                  <nav className="flex items-center gap-6 text-sm font-medium text-muted-foreground">
-                    <Link className="transition hover:text-primary" href="/upload">
-                      Upload
+        <SentryProvider>
+          <PostHogProvider>
+            <ThemeProvider>
+              <div
+                className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
+              >
+                <header className="border-b bg-background">
+                  <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
+                    <Link className="text-base font-semibold" href="/">
+                      Audiograph
                     </Link>
-                  </nav>
-                  <AuthButtonGroup />
-                </div>
+                    <div className="flex items-center gap-6">
+                      <nav className="flex items-center gap-6 text-sm font-medium text-muted-foreground">
+                        <Link className="transition hover:text-primary" href="/upload">
+                          Upload
+                        </Link>
+                      </nav>
+                      <AuthButtonGroup />
+                    </div>
+                  </div>
+                </header>
+                <main className="flex-1">{children}</main>
+                <FeedbackButton />
               </div>
-            </header>
-            <main className="flex-1">{children}</main>
-            <FeedbackButton />
-          </div>
-          <Toaster />
-        </ThemeProvider>
+              <Toaster />
+            </ThemeProvider>
+          </PostHogProvider>
+        </SentryProvider>
       </body>
     </html>
   );

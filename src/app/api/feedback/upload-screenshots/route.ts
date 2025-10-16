@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+import { captureServerException } from '@/lib/monitoring/sentry/server'
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const MAX_FILES = 5
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
@@ -142,6 +144,9 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('Error uploading screenshots:', error)
+    void captureServerException(error, {
+      tags: { action: 'upload_feedback_screenshot' },
+    })
 
     return NextResponse.json(
       {
