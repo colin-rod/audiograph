@@ -30,12 +30,12 @@ export function useDashboardSectionTransition(): MotionConfig {
       animate: {
         opacity: 1,
         y: 0,
-        transition: { duration: 0.3, ease: ENTER_EASING },
+        transition: { duration: 0.3, ease: ENTER_EASING } satisfies Transition,
       },
       exit: {
         opacity: 0,
         y: -12,
-        transition: { duration: 0.2, ease: EXIT_EASING },
+        transition: { duration: 0.2, ease: EXIT_EASING } satisfies Transition,
       },
     }
   }, [prefersReducedMotion])
