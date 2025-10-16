@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+import { getSupabaseConfigOrWarn } from '@/lib/supabase/config'
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const MAX_FILES = 5
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
@@ -71,10 +73,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Supabase client
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const config = getSupabaseConfigOrWarn('feedback-upload')
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!config) {
       console.error('Supabase environment variables are not configured for screenshot uploads.')
       return NextResponse.json(
         {
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cookieStore = await cookies()
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createServerClient(config.url, config.anonKey, {
       cookies: {
         getAll() {
           return cookieStore.getAll()

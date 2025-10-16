@@ -1,46 +1,48 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-const missingConfigMessage =
-  "Supabase environment variables NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set."
+import {
+  ensureSupabaseConfig,
+  getMissingSupabaseConfigMessage,
+  getSupabaseConfig,
+} from "./supabase/config"
 
 let hasLoggedMissingConfigWarning = false
 
-const getSupabaseConfig = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const getConfigOrLogWarning = () => {
+  const config = getSupabaseConfig()
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!config) {
     if (!hasLoggedMissingConfigWarning && process.env.NODE_ENV !== "production") {
-      console.warn(missingConfigMessage)
+      console.warn(getMissingSupabaseConfigMessage())
       hasLoggedMissingConfigWarning = true
     }
+
     return null
   }
 
-  return { supabaseUrl, supabaseAnonKey }
-}
-
-const ensureSupabaseConfig = () => {
-  const config = getSupabaseConfig()
-  if (!config) {
-    throw new Error(missingConfigMessage)
-  }
   return config
 }
 
 export const createSupabaseClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = ensureSupabaseConfig()
+  const { url, anonKey } = ensureSupabaseConfig()
   return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
+    supabaseUrl: url,
+    supabaseKey: anonKey,
   })
 }
 
 export const createSupabaseBrowserClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = ensureSupabaseConfig()
+  const config = getConfigOrLogWarning()
+
+  if (!config) {
+    throw new Error(getMissingSupabaseConfigMessage())
+  }
+
+  const { url, anonKey } = config
+
   return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
+    supabaseUrl: url,
+    supabaseKey: anonKey,
   })
 }
 
@@ -49,13 +51,13 @@ let supabaseInstance: ReturnType<typeof createClientComponentClient> | null = nu
 export const supabase = new Proxy({} as ReturnType<typeof createClientComponentClient>, {
   get(_target, prop) {
     if (!supabaseInstance) {
-      const { supabaseUrl, supabaseAnonKey } = ensureSupabaseConfig()
+      const { url, anonKey } = ensureSupabaseConfig()
       supabaseInstance = createClientComponentClient({
-        supabaseUrl,
-        supabaseKey: supabaseAnonKey,
+        supabaseUrl: url,
+        supabaseKey: anonKey,
       })
     }
+
     return supabaseInstance[prop as keyof typeof supabaseInstance]
   },
 })
-

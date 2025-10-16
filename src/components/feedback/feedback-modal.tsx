@@ -6,6 +6,7 @@ import { Bug, Sparkles, Palette, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { getSupabaseConfigOrWarn } from '@/lib/supabase/config'
 import {
   FeedbackType,
   feedbackFormSchema,
@@ -28,8 +29,6 @@ const FEEDBACK_TYPE_OPTIONS = [
   { value: FeedbackType.UX_ISSUE, label: 'UX Issue', icon: Palette },
   { value: FeedbackType.OTHER, label: 'General Feedback', icon: MessageSquare },
 ] as const
-
-let hasWarnedMissingSupabaseEnv = false
 
 export function FeedbackModal({ open, onOpenChange, triggerRef }: FeedbackModalProps) {
   const [formData, setFormData] = useState<FeedbackFormData>({
@@ -59,21 +58,14 @@ export function FeedbackModal({ open, onOpenChange, triggerRef }: FeedbackModalP
   const getUserEmail = async (): Promise<string | undefined> => {
     try {
       // For client-side, we need to use the browser client
-      const { createBrowserClient } = await import('@supabase/ssr')
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      const config = getSupabaseConfigOrWarn('feedback-modal')
 
-      if (!supabaseUrl || !supabaseAnonKey) {
-        if (!hasWarnedMissingSupabaseEnv && process.env.NODE_ENV !== 'production') {
-          console.warn(
-            'Supabase environment variables are not configured; skipping authenticated feedback metadata.'
-          )
-          hasWarnedMissingSupabaseEnv = true
-        }
+      if (!config) {
         return undefined
       }
 
-      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+      const { createBrowserClient } = await import('@supabase/ssr')
+      const supabase = createBrowserClient(config.url, config.anonKey)
       const {
         data: { user },
       } = await supabase.auth.getUser()
