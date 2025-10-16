@@ -20,6 +20,16 @@ const { createSupabaseClientMock, notMock, deleteMock, fromMock } = vi.hoisted((
   }
 })
 
+vi.mock("@/lib/supabaseClient", () => {
+  const supabaseClient = {
+    from: fromMock,
+  }
+
+  return {
+    supabase: supabaseClient,
+    createSupabaseBrowserClient: () => supabaseClient,
+  }
+})
 vi.mock("@/lib/supabaseClient", () => ({
   createSupabaseClient: createSupabaseClientMock,
 }))

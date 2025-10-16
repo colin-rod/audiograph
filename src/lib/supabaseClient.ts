@@ -1,3 +1,4 @@
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from "next/headers"
 import {
   createClientComponentClient,
@@ -26,6 +27,9 @@ export const createSupabaseBrowserClient = () =>
   createClientComponentClient({
     supabaseUrl,
     supabaseKey: supabaseAnonKey,
+  })
+
+export const supabase = createSupabaseBrowserClient()
     isSingleton: false,
   })
 

@@ -4,6 +4,8 @@ import { AuthButtonGroup } from "@/components/auth/auth-button-group"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { SidebarNav, sidebarNavItems } from "@/components/dashboard/sidebar-nav"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 
 type DashboardLayoutProps = {
   children: ReactNode
@@ -32,7 +34,18 @@ const headerContent = (
   </div>
 )
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default async function DashboardLayout({
+  children,
+}: DashboardLayoutProps) {
+  const supabase = createSupabaseServerClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    redirect("/sign-in")
+  }
+
   return (
     <DashboardShell
       sidebar={sidebarContent}
