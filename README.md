@@ -2,6 +2,24 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Prerequisites
+
+Before running the application, you need to configure Supabase:
+
+1. **Set up Supabase**: Follow the [Supabase Setup Guide](docs/SUPABASE_SETUP.md) to:
+   - Create a Supabase project
+   - Configure environment variables
+   - Set up database tables and storage buckets
+   - Run database migrations
+
+2. **Configure Environment**: Copy `.env.example` to `.env.local` and add your Supabase credentials:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Then update `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` with your actual values.
+
+### Run the Development Server
+
 First, run the development server:
 
 ```bash
@@ -51,6 +69,32 @@ A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on pushes to `main` 
 ## Branching Workflow
 
 Direct pushes to `main` are blocked by `.github/workflows/protect-main.yml`. Develop features on dedicated branches, push them, and open a pull request for review. For full enforcement (required reviews, status checks, linear history), add matching branch protection rules in the repository settings.
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[Supabase Setup Guide](docs/SUPABASE_SETUP.md)** - Complete guide to setting up Supabase from scratch, including:
+  - Creating a Supabase project
+  - Configuring environment variables
+  - Setting up database tables and storage buckets
+  - Running migrations
+  - Troubleshooting common issues
+
+- **[Database Schema](docs/DATABASE_SCHEMA.md)** - Detailed database schema documentation, including:
+  - Table structures and column definitions
+  - Materialized views for analytics
+  - Database functions (RPC) for querying
+  - Indexes and performance optimization
+  - Row Level Security (RLS) policies
+  - Best practices for data operations
+
+- **[Storage Buckets](docs/STORAGE_BUCKETS.md)** - Storage bucket configuration guide, including:
+  - Bucket setup and configuration
+  - Row Level Security policies for storage
+  - File upload implementation
+  - Security considerations
+  - Troubleshooting storage issues
 
 ## Learn More
 

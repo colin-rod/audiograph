@@ -70,11 +70,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate environment variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase configuration missing')
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Server configuration error: Supabase credentials not configured. Please contact the administrator.',
+        },
+        { status: 500 }
+      )
+    }
+
     // Create Supabase client
     const cookieStore = await cookies()
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabaseAnonKey,
       {
         cookies: {
           getAll() {
