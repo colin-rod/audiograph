@@ -38,6 +38,9 @@ const {
   getUserMock,
   onAuthStateChangeMock,
   unsubscribeMock,
+  useShareCardExportMock,
+  exportCardMock,
+  resetShareCardExportMock,
 } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
@@ -82,6 +85,16 @@ const {
     })
   )
   const redirect = vi.fn()
+  const exportCard = vi.fn(async () => {})
+  const resetExport = vi.fn()
+  const useShareCardExport = vi.fn(() => ({
+    exportCard,
+    isExporting: false,
+    status: "idle" as const,
+    error: null,
+    lastFilename: null,
+    reset: resetExport,
+  }))
 
   return {
     usePathnameMock: pathname,
@@ -97,6 +110,9 @@ const {
     getUserMock: getUser,
     onAuthStateChangeMock: onAuthStateChange,
     unsubscribeMock: unsubscribe,
+    useShareCardExportMock: useShareCardExport,
+    exportCardMock: exportCard,
+    resetShareCardExportMock: resetExport,
   }
 })
 
@@ -138,6 +154,10 @@ vi.mock("@/lib/supabase/server", () => ({
     },
   }),
   createSupabaseClient: createSupabaseClientMock,
+}))
+
+vi.mock("@/components/dashboard/share-cards/use-share-card-export", () => ({
+  useShareCardExport: () => useShareCardExportMock(),
 }))
 
 import DashboardLayout from "./layout"
@@ -207,6 +227,17 @@ describe("Dashboard page", () => {
     createSupabaseClientMock.mockClear()
     selectMock.mockClear()
     fromMock.mockClear()
+    useShareCardExportMock.mockReset()
+    exportCardMock.mockReset()
+    resetShareCardExportMock.mockReset()
+    useShareCardExportMock.mockImplementation(() => ({
+      exportCard: exportCardMock,
+      isExporting: false,
+      status: "idle" as const,
+      error: null,
+      lastFilename: null,
+      reset: resetShareCardExportMock,
+    }))
   })
 
   afterEach(() => {
@@ -415,7 +446,7 @@ describe("Dashboard page", () => {
 
     await renderDashboard()
 
-    const summary = await screen.findByTestId("dashboard-summary")
+    await screen.findByTestId("dashboard-summary")
     const timeframeButton = screen.getByRole("button", {
       name: /select timeframe/i,
     })
@@ -426,6 +457,7 @@ describe("Dashboard page", () => {
 
     expect(timeframeButton).toHaveTextContent(/All time/i)
 
+    let summary = screen.getByTestId("dashboard-summary")
     const topArtistCard = getCardQueries(summary, "Top artist")
     expect(topArtistCard?.getByText("Artist 2023")).toBeInTheDocument()
 
@@ -437,6 +469,7 @@ describe("Dashboard page", () => {
     await user.click(januaryOption)
 
     await waitFor(() => {
+      summary = screen.getByTestId("dashboard-summary")
       const cardQueries = getCardQueries(summary, "Top artist")
       expect(cardQueries?.getByText("Artist Jan")).toBeInTheDocument()
     })
@@ -445,6 +478,7 @@ describe("Dashboard page", () => {
       expect(timeframeButton).toHaveTextContent(/Jan 2024/i)
     })
 
+    summary = screen.getByTestId("dashboard-summary")
     const mostActiveYearCard = getCardQueries(summary, "Most active year")
     expect(mostActiveYearCard?.getByText("2024")).toBeInTheDocument()
 
@@ -453,6 +487,85 @@ describe("Dashboard page", () => {
     })
     expect(within(tracksTable).getByText("Track Jan")).toBeInTheDocument()
     expect(within(tracksTable).queryByText("Track 2023")).not.toBeInTheDocument()
+  })
+
+  it("shows share cards control once insights load and triggers export", async () => {
+    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          resolveSelect = resolve
+        })
+    )
+
+    const user = userEvent.setup()
+
+    await renderDashboard()
+
+    const initialShareButton = screen.getByRole("button", { name: /share cards/i })
+    expect(initialShareButton).toBeDisabled()
+
+    await act(async () => {
+      resolveSelect?.({
+        data: [
+          {
+            ms_played: 3_600_000,
+            artist: "Artist Alpha",
+            track: "Track One",
+            ts: "2024-01-10T12:00:00.000Z",
+          },
+          {
+            ms_played: 2_400_000,
+            artist: "Artist Beta",
+            track: "Track Two",
+            ts: "2024-01-12T18:00:00.000Z",
+          },
+          {
+            ms_played: 1_800_000,
+            artist: "Artist Alpha",
+            track: "Track Two",
+            ts: "2024-01-15T20:00:00.000Z",
+          },
+          {
+            ms_played: 900_000,
+            artist: "Artist Gamma",
+            track: "Track Three",
+            ts: "2024-01-20T09:00:00.000Z",
+          },
+        ],
+        error: null,
+      })
+    })
+
+    const shareButton = await screen.findByRole("button", { name: /share cards/i })
+    expect(shareButton).toBeEnabled()
+
+    await user.click(shareButton)
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /share your top insights/i,
+    })
+    expect(dialog).toBeInTheDocument()
+
+    const downloadArtistsPng = within(dialog).getByRole("button", {
+      name: /download artists png/i,
+    })
+    await user.click(downloadArtistsPng)
+
+    expect(exportCardMock).toHaveBeenCalled()
+    const firstCallArgs = exportCardMock.mock.calls[0]?.[0]
+    expect(firstCallArgs?.format).toBe("png")
+    expect(firstCallArgs?.filename).toContain("top-artists")
+
+    const downloadTracksSvg = within(dialog).getByRole("button", {
+      name: /download tracks svg/i,
+    })
+    await user.click(downloadTracksSvg)
+
+    const svgCall = exportCardMock.mock.calls.find(
+      ([args]) => args?.format === "svg"
+    )
+    expect(svgCall?.[0]?.filename).toContain("top-tracks")
   })
 
   it("shows an unauthorized message when Supabase returns a 401", async () => {
