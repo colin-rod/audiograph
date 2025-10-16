@@ -30,10 +30,6 @@ const sidebarNavItems: SidebarNavItem[] = [
     title: "Overview",
     href: "/dashboard",
   },
-  {
-    title: "Insights",
-    href: "/dashboard/insights",
-  },
 ]
 
 function SidebarNav({ items = sidebarNavItems }: { items?: SidebarNavItem[] }) {

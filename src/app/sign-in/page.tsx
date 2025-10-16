@@ -151,6 +151,7 @@ const SignInContent = () => {
             <div className="space-y-2">
               <Button
                 type="submit"
+                variant="primary"
                 className="w-full"
                 disabled={status === "loading"}
               >
