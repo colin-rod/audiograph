@@ -7,6 +7,7 @@ import {
   type ListenInsert,
 } from '@/lib/spotifyHistory'
 import { useUploadStatus } from '@/lib/useUploadStatus'
+import { cn } from '@/lib/utils'
 
 export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
@@ -97,9 +98,11 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-            isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40'
-          } ${isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary'}`}
+          className={cn(
+            'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+            isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40',
+            isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary',
+          )}
         >
           <p className="text-sm font-medium">Drag and drop your Spotify JSON export here</p>
           <p className="mt-2 text-xs text-muted-foreground">
