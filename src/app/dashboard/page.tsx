@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 import {
   DashboardSummary,
   DashboardSummarySkeleton,
-  type DashboardStats,
 } from "@/components/dashboard/dashboard-summary"
 import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
 import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboard/listening-history"
@@ -21,13 +20,17 @@ import {
   type ListeningDiversityScore,
   type TopDayHighlight,
 } from "@/components/dashboard/personal-milestones"
+import { ListeningStreakCard, ListeningStreakCardSkeleton } from "@/components/dashboard/listening-streak-card"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
+import { WeeklyCadenceChart, WeeklyCadenceChartSkeleton } from "@/components/dashboard/weekly-cadence-chart"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 import { ShareCardsDialog } from "@/components/dashboard/share-cards"
+import { getDashboardData, getAvailableTimeframes } from "@/lib/analytics-service"
+import type { TimeframeFilter as TimeframeFilterType } from "@/lib/analytics-types"
 
 import {
   TimeframeFilter,
@@ -36,13 +39,6 @@ import {
   type TimeframeValue,
   type TimeframeYearOption,
 } from "@/components/dashboard/timeframe-filter"
-
-type ListenSummaryRow = {
-  ms_played: number | null
-  artist: string | null
-  track: string | null
-  ts: string | null
-}
 
 type DashboardErrorState = "unauthorized" | "error" | null
 
@@ -130,6 +126,7 @@ const ALL_TIME_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 })
+const MS_PER_DAY = 1000 * 60 * 60 * 24
 
 const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats => {
   const totalMs = listens.reduce(
@@ -543,6 +540,132 @@ const calculateListeningTrends = (listens: ListenSummaryRow[]) => {
     .sort((a, b) => a.month.localeCompare(b.month))
 }
 
+const WEEK_RANGE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+})
+
+const getISOWeekInfo = (date: Date) => {
+  const target = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  )
+  const day = target.getUTCDay()
+  const isoDay = day === 0 ? 7 : day
+  const weekStart = new Date(target)
+  weekStart.setUTCDate(weekStart.getUTCDate() - (isoDay - 1))
+  const weekEnd = new Date(weekStart)
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
+  const thursday = new Date(target)
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - isoDay)
+  const year = thursday.getUTCFullYear()
+  const yearStart = new Date(Date.UTC(year, 0, 1))
+  const week = Math.ceil(
+    ((thursday.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7
+  )
+
+  return { year, week, weekStart, weekEnd }
+}
+
+const calculateWeeklyCadence = (listens: ListenSummaryRow[]) => {
+  const weeklyTotals = new Map<
+    string,
+    { ms: number; label: string; rangeLabel: string }
+  >()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const { year, week, weekStart, weekEnd } = getISOWeekInfo(tsDate)
+    const weekKey = `${year}-W${String(week).padStart(2, "0")}`
+    const shortYear = year.toString().slice(-2)
+    const label = `W${String(week).padStart(2, "0")} '${shortYear}`
+    const rangeLabel = `${WEEK_RANGE_FORMATTER.format(weekStart)} – ${WEEK_RANGE_FORMATTER.format(weekEnd)}`
+    const existing = weeklyTotals.get(weekKey)
+    const msPlayed = listen.ms_played ?? 0
+
+    if (existing) {
+      weeklyTotals.set(weekKey, {
+        ms: existing.ms + msPlayed,
+        label: existing.label,
+        rangeLabel: existing.rangeLabel,
+      })
+    } else {
+      weeklyTotals.set(weekKey, { ms: msPlayed, label, rangeLabel })
+    }
+  })
+
+  return Array.from(weeklyTotals.entries())
+    .map(([week, value]) => ({
+      week,
+      label: value.label,
+      rangeLabel: value.rangeLabel,
+      hours: Number((value.ms / MS_PER_HOUR).toFixed(1)),
+    }))
+    .sort((a, b) => a.week.localeCompare(b.week))
+}
+
+const calculateListeningStreak = (listens: ListenSummaryRow[]) => {
+  const daySet = new Set<string>()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) return
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) return
+    const year = tsDate.getUTCFullYear()
+    const month = tsDate.getUTCMonth() + 1
+    const day = tsDate.getUTCDate()
+    const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    daySet.add(dayKey)
+  })
+
+  const days = Array.from(daySet).sort()
+  if (days.length === 0) {
+    return null
+  }
+
+  const toUTCDateValue = (day: string) => {
+    const [yearStr, monthStr, dayStr] = day.split("-")
+    return Date.UTC(
+      Number(yearStr),
+      Number(monthStr) - 1,
+      Number(dayStr)
+    )
+  }
+
+  let currentStart = days[0]
+  let currentLength = 1
+  let longest = { length: 1, start: days[0], end: days[0] }
+  let previousDay = days[0]
+
+  for (let index = 1; index < days.length; index += 1) {
+    const day = days[index]
+    const diffDays =
+      (toUTCDateValue(day) - toUTCDateValue(previousDay)) / MS_PER_DAY
+
+    if (diffDays === 1) {
+      currentLength += 1
+    } else {
+      if (currentLength > longest.length) {
+        longest = { length: currentLength, start: currentStart, end: previousDay }
+      }
+      currentStart = day
+      currentLength = 1
+    }
+
+    if (
+      currentLength > longest.length ||
+      (currentLength === longest.length && currentStart < longest.start)
+    ) {
+      longest = { length: currentLength, start: currentStart, end: day }
+    }
+
+    previousDay = day
+  }
+
+  return longest
+}
+
 const calculateListeningClock = (listens: ListenSummaryRow[]) => {
   const slotTotals = new Map<string, number>()
 
@@ -592,6 +715,8 @@ type DashboardData = {
   topTracks: ReturnType<typeof calculateTopTracks>
   listeningTrends: ReturnType<typeof calculateListeningTrends>
   listeningClock: ReturnType<typeof calculateListeningClock>
+  weeklyCadence: ReturnType<typeof calculateWeeklyCadence>
+  listeningStreak: ReturnType<typeof calculateListeningStreak>
 }
 
 const calculateDashboardPersonalMilestones = (
@@ -608,6 +733,8 @@ const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => (
   topTracks: calculateTopTracks(listens),
   listeningTrends: calculateListeningTrends(listens),
   listeningClock: calculateListeningClock(listens),
+  weeklyCadence: calculateWeeklyCadence(listens),
+  listeningStreak: calculateListeningStreak(listens),
 })
 
 const ALL_TIME_OPTION: TimeframeOption = {
@@ -616,47 +743,133 @@ const ALL_TIME_OPTION: TimeframeOption = {
   label: "All time",
 }
 
+type DashboardData = Extract<
+  Awaited<ReturnType<typeof getDashboardData>>,
+  { success: true }
+>["data"]
+
 export default function DashboardPage() {
-  const [listens, setListens] = useState<ListenSummaryRow[] | null>(null)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [errorState, setErrorState] = useState<DashboardErrorState>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
+  const [timeframeOptions, setTimeframeOptions] = useState<TimeframeOption[]>([
+    ALL_TIME_OPTION,
+  ])
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
+  const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+  })
+
+  // Fetch available timeframes on mount
+  useEffect(() => {
+    let active = true
+    const supabase = createSupabaseBrowserClient()
+
+    const fetchTimeframes = async () => {
+      const result = await getAvailableTimeframes(supabase)
+
+      if (!active) return
+
+      if (!result.success) {
+        const status = getPostgrestErrorStatus(result.error)
+        if (status === 401) {
+          setErrorState("unauthorized")
+        } else {
+          console.error(result.error)
+          setErrorState("error")
+        }
+        return
+      }
+
+      const yearSet = new Set<number>()
+      const monthMap = new Map<string, { year: number; month: number }>()
+
+      result.data.forEach((tf) => {
+        yearSet.add(tf.year)
+        const key = `${tf.year}-${String(tf.month).padStart(2, "0")}`
+        monthMap.set(key, { year: tf.year, month: tf.month })
+      })
+
+      const yearOptions: TimeframeYearOption[] = Array.from(yearSet)
+        .sort((a, b) => b - a)
+        .map((year) => ({
+          type: "year",
+          value: `year-${year}` as const,
+          label: year.toString(),
+          year,
+        }))
+
+      const monthOptions: TimeframeMonthOption[] = Array.from(monthMap.entries())
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([key, { year, month }]) => {
+          const date = new Date(Date.UTC(year, month - 1, 1))
+          return {
+            type: "month" as const,
+            value: `month-${year}-${String(month).padStart(2, "0")}` as const,
+            label: MONTH_LABEL_FORMATTER.format(date),
+            year,
+            month,
+          }
+        })
+
+      setTimeframeOptions([ALL_TIME_OPTION, ...yearOptions, ...monthOptions])
+    }
+
+    void fetchTimeframes()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const activeTimeframe = useMemo(
+    () => timeframeOptions.find((option) => option.value === selectedTimeframe),
+    [selectedTimeframe, timeframeOptions]
+  )
+
+  const timeframeFilter = useMemo((): TimeframeFilterType => {
+    if (!activeTimeframe || activeTimeframe.type === "all") {
+      return { type: "all" }
+    }
+    if (activeTimeframe.type === "year") {
+      return { type: "year", year: activeTimeframe.year }
+    }
+    return {
+      type: "month",
+      year: activeTimeframe.year,
+      month: activeTimeframe.month,
+    }
+  }, [activeTimeframe])
+
+  // Fetch dashboard data when timeframe changes
   useEffect(() => {
     let active = true
     const supabase = createSupabaseBrowserClient()
 
     const fetchData = async () => {
-      const { data, error } = await supabase
-        .from("listens")
-        .select("ms_played, artist, track, ts")
+      const result = await getDashboardData(supabase, timeframeFilter)
 
       if (!active) return
 
-      if (error) {
-        const status = getPostgrestErrorStatus(error)
-
+      if (!result.success) {
+        const status = getPostgrestErrorStatus(result.error)
         if (status === 401) {
           setErrorState("unauthorized")
         } else {
-          console.error(error)
+          console.error(result.error)
           setErrorState("error")
         }
-
-        setListens(null)
+        setDashboardData(null)
         return
       }
 
       setErrorState(null)
-
-      const fetchedListens = (data ?? [])
-        .map(toListenSummaryRow)
-        .filter((row): row is ListenSummaryRow => row !== null)
-
-      setListens(fetchedListens)
+      setDashboardData(result.data)
     }
 
     void fetchData()
@@ -664,111 +877,12 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [supabase])
-
-  const timeframeOptions = useMemo<TimeframeOption[]>(() => {
-    if (!listens || listens.length === 0) {
-      return [ALL_TIME_OPTION]
-    }
-
-    const yearSet = new Set<number>()
-    const monthSet = new Set<string>()
-
-    listens.forEach((listen) => {
-      if (!listen.ts) return
-      const tsDate = new Date(listen.ts)
-      if (Number.isNaN(tsDate.getTime())) return
-      const year = tsDate.getUTCFullYear()
-      yearSet.add(year)
-      const month = tsDate.getUTCMonth() + 1
-      monthSet.add(`${year}-${String(month).padStart(2, "0")}`)
-    })
-
-    const yearOptions: TimeframeYearOption[] = Array.from(yearSet)
-      .sort((a, b) => b - a)
-      .map((year) => ({
-        type: "year",
-        value: `year-${year}` as const,
-        label: year.toString(),
-        year,
-      }))
-
-    const monthOptions: TimeframeMonthOption[] = Array.from(monthSet)
-      .sort((a, b) => b.localeCompare(a))
-      .map((key) => {
-        const [yearStr, monthStr] = key.split("-")
-        const year = Number(yearStr)
-        const month = Number(monthStr)
-        const date = new Date(Date.UTC(year, month - 1, 1))
-        return {
-          type: "month" as const,
-          value: `month-${year}-${monthStr}` as const,
-          label: MONTH_LABEL_FORMATTER.format(date),
-          year,
-          month,
-        }
-      })
-
-    return [ALL_TIME_OPTION, ...yearOptions, ...monthOptions]
-  }, [listens])
-
-  useEffect(() => {
-    if (!timeframeOptions.some((option) => option.value === selectedTimeframe)) {
-      setSelectedTimeframe(ALL_TIME_OPTION.value)
-    }
-  }, [timeframeOptions, selectedTimeframe])
-
-  const activeTimeframe = useMemo(
-    () => timeframeOptions.find((option) => option.value === selectedTimeframe),
-    [selectedTimeframe, timeframeOptions]
-  )
-
-  const filteredListens = useMemo(() => {
-    if (!listens) {
-      return null
-    }
-
-    if (!activeTimeframe || activeTimeframe.type === "all") {
-      return listens
-    }
-
-    return listens.filter((listen) => {
-      if (!listen.ts) {
-        return false
-      }
-
-      const tsDate = new Date(listen.ts)
-      if (Number.isNaN(tsDate.getTime())) {
-        return false
-      }
-
-      const year = tsDate.getUTCFullYear()
-
-      if (activeTimeframe.type === "year") {
-        return year === activeTimeframe.year
-      }
-
-      const month = tsDate.getUTCMonth() + 1
-      return (
-        activeTimeframe.type === "month" &&
-        year === activeTimeframe.year &&
-        month === activeTimeframe.month
-      )
-    })
-  }, [activeTimeframe, listens])
-
-  const dashboardData = useMemo(() => {
-    if (!filteredListens) {
-      return null
-    }
-
-    return calculateDashboardData(filteredListens)
-  }, [filteredListens])
+  }, [timeframeFilter, supabase])
 
   const sectionMotion = useDashboardSectionTransition()
   const activeTimeframeKey = activeTimeframe?.value ?? "all"
   const timeframeLabel = activeTimeframe?.label ?? ALL_TIME_OPTION.label
-  const isLoadingListens = listens === null
+  const isLoadingData = dashboardData === null
   const hasShareableInsights = Boolean(
     dashboardData &&
       dashboardData.topArtists.length > 0 &&
@@ -808,7 +922,7 @@ export default function DashboardPage() {
             type="button"
             variant="outline"
             onClick={() => setIsShareDialogOpen(true)}
-            disabled={isLoadingListens || !hasShareableInsights}
+            disabled={isLoadingData || !hasShareableInsights}
           >
             Share cards
           </Button>
@@ -951,8 +1065,8 @@ export default function DashboardPage() {
         </AnimatePresence>
       </section>
       <section
-        aria-label="Listening trends and clock"
-        className="grid gap-6 lg:grid-cols-2"
+        aria-label="Time-based insights"
+        className="grid gap-6 xl:grid-cols-3"
       >
         <AnimatePresence mode="wait">
           {dashboardData ? (
@@ -961,7 +1075,7 @@ export default function DashboardPage() {
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
-              className="h-full"
+              className="h-full xl:col-span-2"
             >
               <ListeningTrendsChart
                 data={dashboardData.listeningTrends}
@@ -974,9 +1088,35 @@ export default function DashboardPage() {
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
-              className="h-full"
+              className="h-full xl:col-span-2"
             >
               <ListeningTrendsChartSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`weekly-cadence-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <WeeklyCadenceChart
+                data={dashboardData.weeklyCadence}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`weekly-cadence-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <WeeklyCadenceChartSkeleton className="h-full" />
             </motion.div>
           )}
         </AnimatePresence>
@@ -987,7 +1127,7 @@ export default function DashboardPage() {
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
-              className="h-full"
+              className="h-full xl:col-span-2"
             >
               <ListeningClockHeatmap
                 data={dashboardData.listeningClock}
@@ -1000,34 +1140,49 @@ export default function DashboardPage() {
               initial={sectionMotion.initial}
               animate={sectionMotion.animate}
               exit={sectionMotion.exit}
-              className="h-full"
+              className="h-full xl:col-span-2"
             >
               <ListeningClockHeatmapSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`listening-streak-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningStreakCard
+                streak={dashboardData.listeningStreak}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`listening-streak-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningStreakCardSkeleton className="h-full" />
             </motion.div>
           )}
         </AnimatePresence>
       </section>
       <section aria-label="Searchable listening history">
         <AnimatePresence mode="wait">
-          {filteredListens ? (
-            <motion.div
-              key={`listening-history-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-            >
-              <ListeningHistory listens={filteredListens} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`listening-history-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-            >
-              <ListeningHistorySkeleton />
-            </motion.div>
-          )}
+          <motion.div
+            key={`listening-history-${activeTimeframeKey}`}
+            initial={sectionMotion.initial}
+            animate={sectionMotion.animate}
+            exit={sectionMotion.exit}
+          >
+            <ListeningHistory timeframeFilter={timeframeFilter} />
+          </motion.div>
         </AnimatePresence>
       </section>
       <ShareCardsDialog
