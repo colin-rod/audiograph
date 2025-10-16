@@ -16,6 +16,7 @@ import {
 interface FeedbackModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  triggerRef?: React.RefObject<HTMLElement>
 }
 
 // Feedback type options with icons
@@ -26,7 +27,7 @@ const FEEDBACK_TYPE_OPTIONS = [
   { value: FeedbackType.OTHER, label: 'General Feedback', icon: MessageSquare },
 ] as const
 
-export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
+export function FeedbackModal({ open, onOpenChange, triggerRef }: FeedbackModalProps) {
   const [formData, setFormData] = useState<FeedbackFormData>({
     type: FeedbackType.OTHER,
     description: '',
@@ -39,6 +40,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
   const descriptionId = useId()
 
@@ -274,6 +276,93 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, isSubmitting, handleClose])
 
+  useEffect(() => {
+    if (!open) return
+
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    previouslyFocusedElementRef.current = document.activeElement as HTMLElement | null
+    const triggerNode = triggerRef?.current ?? null
+
+    const focusableSelector = [
+      'a[href]',
+      'button:not([disabled])',
+      'textarea:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(', ')
+
+    const getFocusableElements = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(focusableSelector)
+      ).filter(
+        element =>
+          !element.hasAttribute('disabled') &&
+          element.getAttribute('aria-hidden') !== 'true'
+      )
+
+    const focusFirstElement = () => {
+      const focusableElements = getFocusableElements()
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus()
+      } else {
+        dialog.focus()
+      }
+    }
+
+    focusFirstElement()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') {
+        return
+      }
+
+      const focusableElements = getFocusableElements()
+
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      const activeElement = document.activeElement as HTMLElement | null
+
+      if (event.shiftKey) {
+        if (activeElement === firstElement || !dialog.contains(activeElement)) {
+          event.preventDefault()
+          lastElement.focus()
+        }
+        return
+      }
+
+      if (activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!dialog.contains(event.target as Node)) {
+        event.stopPropagation()
+        focusFirstElement()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('focusin', handleFocusIn)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('focusin', handleFocusIn)
+
+      const focusTarget = triggerNode ?? previouslyFocusedElementRef.current
+      focusTarget?.focus()
+    }
+  }, [open, triggerRef])
+
   if (!open || !mounted) {
     return null
   }
@@ -292,6 +381,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border bg-background p-6 shadow-lg"
+        tabIndex={-1}
       >
         {/* Header */}
         <div className="mb-6">
