@@ -78,7 +78,7 @@ describe("UploadPage reset controls", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     expect(notMock).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Select a Spotify listening history JSON file to begin."),
+      screen.getByText("Select a Spotify listening history JSON or ZIP export to begin."),
     ).toBeInTheDocument();
 
     await waitFor(() =>
