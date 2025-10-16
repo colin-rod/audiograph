@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 type DashboardStats = {
   totalHours: string
@@ -11,6 +12,7 @@ type DashboardStats = {
 
 type DashboardSummaryProps = {
   stats: DashboardStats
+  className?: string
 }
 
 const SUMMARY_ITEMS: Array<{ key: keyof DashboardStats; label: string }> = [
@@ -35,11 +37,14 @@ const formatSummaryValue = (
   return value
 }
 
-function DashboardSummary({ stats }: DashboardSummaryProps) {
+function DashboardSummary({ stats, className }: DashboardSummaryProps) {
   return (
     <div
       data-testid="dashboard-summary"
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+      className={cn(
+        "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
+        className
+      )}
     >
       {SUMMARY_ITEMS.map((item) => (
         <Card key={item.key} className="shadow-none">
@@ -59,11 +64,14 @@ function DashboardSummary({ stats }: DashboardSummaryProps) {
   )
 }
 
-function DashboardSummarySkeleton() {
+function DashboardSummarySkeleton({ className }: { className?: string }) {
   return (
     <div
       data-testid="dashboard-summary-skeleton"
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+      className={cn(
+        "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
+        className
+      )}
     >
       {SUMMARY_ITEMS.map((item) => (
         <Card key={item.key} className="shadow-none">

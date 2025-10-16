@@ -1,5 +1,8 @@
 "use client"
 
+import { Music2 } from "lucide-react"
+
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -11,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 export type TopTrackDatum = {
   track: string
@@ -20,30 +24,39 @@ export type TopTrackDatum = {
 
 type TopTracksTableProps = {
   data: TopTrackDatum[]
+  className?: string
 }
 
 const formatHours = (value: number) => `${value.toFixed(1)} hrs`
 
-function TopTracksTable({ data }: TopTracksTableProps) {
+function TopTracksTable({ data, className }: TopTracksTableProps) {
   if (!data.length) {
     return (
-      <Card aria-labelledby="top-tracks-heading" className="shadow-none">
+      <Card
+        aria-labelledby="top-tracks-heading"
+        className={cn("shadow-none", className)}
+      >
         <CardHeader>
           <CardTitle id="top-tracks-heading" role="heading" aria-level={3}>
             Top tracks
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No track listening data available yet.
-          </p>
+          <EmptyState
+            title="Your soundtrack is waiting"
+            description="Listen to a few tracks and we will showcase your go-to songs and artists."
+            icon={<Music2 aria-hidden className="h-6 w-6" />}
+          />
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <Card aria-labelledby="top-tracks-heading" className="shadow-none">
+    <Card
+      aria-labelledby="top-tracks-heading"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader className="space-y-1">
         <CardTitle id="top-tracks-heading" role="heading" aria-level={3}>
           Top tracks
@@ -81,9 +94,13 @@ function TopTracksTable({ data }: TopTracksTableProps) {
   )
 }
 
-function TopTracksTableSkeleton() {
+function TopTracksTableSkeleton({ className }: { className?: string }) {
   return (
-    <Card aria-busy data-testid="top-tracks-table-skeleton" className="shadow-none">
+    <Card
+      aria-busy
+      data-testid="top-tracks-table-skeleton"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader>
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-56" />

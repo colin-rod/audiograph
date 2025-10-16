@@ -1,9 +1,12 @@
 "use client"
 
 import { Fragment } from "react"
+import { Clock3 } from "lucide-react"
 
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 export type ListeningClockDatum = {
   day: number
@@ -13,6 +16,7 @@ export type ListeningClockDatum = {
 
 type ListeningClockHeatmapProps = {
   data: ListeningClockDatum[]
+  className?: string
 }
 
 const DAYS = [
@@ -30,10 +34,13 @@ const formatHours = (value: number) => `${value.toFixed(1)} hrs`
 const findMaxHours = (data: ListeningClockDatum[]): number =>
   data.reduce((max, item) => Math.max(max, item.hours), 0)
 
-function ListeningClockHeatmap({ data }: ListeningClockHeatmapProps) {
+function ListeningClockHeatmap({ data, className }: ListeningClockHeatmapProps) {
   if (!data.length) {
     return (
-      <Card aria-labelledby="listening-clock-heading" className="shadow-none">
+      <Card
+        aria-labelledby="listening-clock-heading"
+        className={cn("shadow-none", className)}
+      >
         <CardHeader>
           <CardTitle
             id="listening-clock-heading"
@@ -44,9 +51,11 @@ function ListeningClockHeatmap({ data }: ListeningClockHeatmapProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            We will highlight your most active hours once data is available.
-          </p>
+          <EmptyState
+            title="Your listening clock is quiet"
+            description="Log some plays so we can map the hours and days when you listen the most."
+            icon={<Clock3 aria-hidden className="h-6 w-6" />}
+          />
         </CardContent>
       </Card>
     )
@@ -62,7 +71,10 @@ function ListeningClockHeatmap({ data }: ListeningClockHeatmapProps) {
   })
 
   return (
-    <Card aria-labelledby="listening-clock-heading" className="shadow-none">
+    <Card
+      aria-labelledby="listening-clock-heading"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader className="space-y-1">
         <CardTitle
           id="listening-clock-heading"
@@ -135,12 +147,12 @@ function ListeningClockHeatmap({ data }: ListeningClockHeatmapProps) {
   )
 }
 
-function ListeningClockHeatmapSkeleton() {
+function ListeningClockHeatmapSkeleton({ className }: { className?: string }) {
   return (
     <Card
       aria-busy
       data-testid="listening-clock-heatmap-skeleton"
-      className="shadow-none"
+      className={cn("shadow-none", className)}
     >
       <CardHeader>
         <Skeleton className="h-5 w-40" />

@@ -9,9 +9,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { LineChart } from "lucide-react"
 
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 export type ListeningTrendDatum = {
   month: string
@@ -21,14 +24,18 @@ export type ListeningTrendDatum = {
 
 type ListeningTrendsChartProps = {
   data: ListeningTrendDatum[]
+  className?: string
 }
 
 const formatHours = (value: number) => `${value.toFixed(1)} hrs`
 
-function ListeningTrendsChart({ data }: ListeningTrendsChartProps) {
+function ListeningTrendsChart({ data, className }: ListeningTrendsChartProps) {
   if (!data.length) {
     return (
-      <Card aria-labelledby="listening-trends-heading" className="shadow-none">
+      <Card
+        aria-labelledby="listening-trends-heading"
+        className={cn("shadow-none", className)}
+      >
         <CardHeader>
           <CardTitle
             id="listening-trends-heading"
@@ -39,16 +46,21 @@ function ListeningTrendsChart({ data }: ListeningTrendsChartProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Monthly listening totals will appear once we have data.
-          </p>
+          <EmptyState
+            title="Trends are on the way"
+            description="As soon as you log some listens we will chart your monthly hours here."
+            icon={<LineChart aria-hidden className="h-6 w-6" />}
+          />
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <Card aria-labelledby="listening-trends-heading" className="shadow-none">
+    <Card
+      aria-labelledby="listening-trends-heading"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader className="space-y-1">
         <CardTitle
           id="listening-trends-heading"
@@ -103,12 +115,12 @@ function ListeningTrendsChart({ data }: ListeningTrendsChartProps) {
   )
 }
 
-function ListeningTrendsChartSkeleton() {
+function ListeningTrendsChartSkeleton({ className }: { className?: string }) {
   return (
     <Card
       aria-busy
       data-testid="listening-trends-chart-skeleton"
-      className="shadow-none"
+      className={cn("shadow-none", className)}
     >
       <CardHeader>
         <Skeleton className="h-5 w-40" />
