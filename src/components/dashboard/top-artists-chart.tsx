@@ -10,9 +10,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { Users } from "lucide-react"
 
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 export type TopArtistDatum = {
   name: string
@@ -21,30 +24,39 @@ export type TopArtistDatum = {
 
 type TopArtistsChartProps = {
   data: TopArtistDatum[]
+  className?: string
 }
 
 const HOURS_TOOLTIP_LABEL = (value: number) => `${value.toFixed(1)} hrs`
 
-function TopArtistsChart({ data }: TopArtistsChartProps) {
+function TopArtistsChart({ data, className }: TopArtistsChartProps) {
   if (!data.length) {
     return (
-      <Card aria-labelledby="top-artists-heading" className="shadow-none">
+      <Card
+        aria-labelledby="top-artists-heading"
+        className={cn("shadow-none", className)}
+      >
         <CardHeader>
           <CardTitle id="top-artists-heading" role="heading" aria-level={3}>
             Top artists
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No artist listening data available yet.
-          </p>
+          <EmptyState
+            title="No artist insights yet"
+            description="Once you start listening, we will highlight the artists you return to most."
+            icon={<Users aria-hidden className="h-6 w-6" />}
+          />
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <Card aria-labelledby="top-artists-heading" className="shadow-none">
+    <Card
+      aria-labelledby="top-artists-heading"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader className="space-y-1">
         <CardTitle id="top-artists-heading" role="heading" aria-level={3}>
           Top artists
@@ -97,9 +109,13 @@ function TopArtistsChart({ data }: TopArtistsChartProps) {
   )
 }
 
-function TopArtistsChartSkeleton() {
+function TopArtistsChartSkeleton({ className }: { className?: string }) {
   return (
-    <Card aria-busy data-testid="top-artists-chart-skeleton" className="shadow-none">
+    <Card
+      aria-busy
+      data-testid="top-artists-chart-skeleton"
+      className={cn("shadow-none", className)}
+    >
       <CardHeader>
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-48" />
