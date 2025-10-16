@@ -6,7 +6,7 @@ import {
   SpotifyHistoryParseError,
   type ListenInsert,
 } from '@/lib/spotifyHistory'
-import { useUploadStatus, type UploadStatusState } from '@/lib/useUploadStatus'
+import { useUploadStatus } from '@/lib/useUploadStatus'
 
 export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
@@ -137,17 +137,16 @@ export default function UploadPage() {
     setSuccess,
     setUploading,
     setValidating,
-    updateStatus,
     isBusy,
   } = useUploadStatus('Select a Spotify listening history JSON file to begin.')
 
-  const resetState = useCallback(
-    (message: string, state: UploadStatusState) => {
+  const resetToError = useCallback(
+    (message: string) => {
       setProgress(0)
       setSelectedFile(null)
-      updateStatus(state, message)
+      setError(message)
     },
-    [updateStatus],
+    [setError],
   )
 
   const handleResetRequest = useCallback(() => {
@@ -187,13 +186,13 @@ export default function UploadPage() {
       setValidating('Validating file…')
 
       if (!file.name.toLowerCase().endsWith('.json')) {
-        resetState('Only JSON files are supported.', 'error')
+        resetToError('Only JSON files are supported.')
         return
       }
 
       const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
       if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
-        resetState('The selected file is not recognized as JSON.', 'error')
+        resetToError('The selected file is not recognized as JSON.')
         return
       }
 
@@ -202,7 +201,7 @@ export default function UploadPage() {
         text = await file.text()
       } catch (error) {
         console.error(error)
-        resetState('Unable to read the file. Please try again.', 'error')
+        resetToError('Unable to read the file. Please try again.')
         return
       }
 
@@ -211,7 +210,7 @@ export default function UploadPage() {
         parsed = JSON.parse(text)
       } catch (error) {
         console.error(error)
-        resetState('The file does not contain valid JSON.', 'error')
+        resetToError('The file does not contain valid JSON.')
         return
       }
 
@@ -220,12 +219,12 @@ export default function UploadPage() {
         rows = parseSpotifyHistory(parsed)
       } catch (error) {
         if (error instanceof SpotifyHistoryParseError) {
-          resetState(error.message, 'error')
+          resetToError(error.message)
           return
         }
 
         console.error(error)
-        resetState('An unexpected error occurred while processing the file.', 'error')
+        resetToError('An unexpected error occurred while processing the file.')
         return
       }
 
@@ -237,7 +236,7 @@ export default function UploadPage() {
 
         if (error) {
           console.error(error)
-          resetState('Supabase returned an error while uploading. Please try again.', 'error')
+          resetToError('Supabase returned an error while uploading. Please try again.')
           return
         }
 
@@ -250,7 +249,7 @@ export default function UploadPage() {
       setSelectedFile(null)
       setSuccess(`Successfully uploaded ${rows.length} listening records.`)
     },
-    [resetState, setSuccess, setUploading, setValidating, supabase],
+    [resetToError, setSuccess, setUploading, setValidating, supabase],
   )
 
 
