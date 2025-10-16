@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  protect-main:
+    name: Protect Main Branch
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.pusher.name != 'web-flow' && github.event.pusher.name != 'github-actions[bot]'
+    steps:
+      - name: Fail run
+        run: |
+          echo "Direct pushes to main are disabled. Open a pull request instead."
+          exit 1
+
   quality-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
