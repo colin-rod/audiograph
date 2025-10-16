@@ -85,7 +85,9 @@ const {
     })
   )
   const redirect = vi.fn()
-  const exportCard = vi.fn(async () => {})
+  const exportCard = vi.fn<
+    (args: { node: HTMLElement | null; filename: string; format: "png" | "svg" }) => Promise<void>
+  >()
   const resetExport = vi.fn()
   const useShareCardExport = vi.fn(() => ({
     exportCard,
