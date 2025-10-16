@@ -4,21 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+const solidButtonStyles = "bg-primary text-primary-foreground hover:bg-primary/90"
+const outlineButtonStyles =
+  "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50"
+const softButtonStyles = "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+const ghostButtonStyles =
+  "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold tracking-tight transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-5 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/60 focus-visible:ring-offset-0 aria-invalid:ring-destructive/30 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-[0_16px_40px_-18px_rgba(29,185,84,0.8)] hover:bg-primary/90 hover:shadow-[0_20px_45px_-16px_rgba(29,185,84,0.95)]",
+        primary: solidButtonStyles,
+        default: solidButtonStyles,
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "border border-[color:var(--shell-border)] bg-transparent text-[color:var(--foreground)] hover:border-[color:rgba(18,18,18,0.3)] hover:bg-[color:rgba(18,18,18,0.08)] hover:text-[color:var(--foreground)] dark:border-[color:rgba(255,255,255,0.24)] dark:text-white dark:hover:border-[color:rgba(255,255,255,0.4)] dark:hover:bg-[color:rgba(255,255,255,0.12)]",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "text-[color:var(--foreground)] opacity-80 hover:opacity-100 hover:bg-[color:rgba(18,18,18,0.06)] dark:text-white dark:hover:bg-[color:rgba(255,255,255,0.08)]",
+        secondary: outlineButtonStyles,
+        outline: outlineButtonStyles,
+        muted: softButtonStyles,
+        ghost: ghostButtonStyles,
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
@@ -31,7 +36,7 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "primary",
       size: "default",
     },
   }
