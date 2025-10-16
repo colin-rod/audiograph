@@ -1,10 +1,10 @@
 "use client"
-"use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
+import { getListeningHistory } from "@/lib/analytics-service"
+import type { TimeframeFilter } from "@/lib/analytics-types"
+import { timeframeToParams } from "@/lib/analytics-types"
 
 export type ListeningHistoryEntry = {
   track: string | null
@@ -24,7 +28,7 @@ export type ListeningHistoryEntry = {
 }
 
 type ListeningHistoryProps = {
-  listens: ListeningHistoryEntry[]
+  timeframeFilter: TimeframeFilter
   className?: string
 }
 
@@ -62,64 +66,80 @@ const parseDateTimeInput = (value: string): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-const sortByTimestampDesc = (a: ListeningHistoryEntry, b: ListeningHistoryEntry) => {
-  const aTime = a.ts ? new Date(a.ts).getTime() : 0
-  const bTime = b.ts ? new Date(b.ts).getTime() : 0
-  return bTime - aTime
-}
+const PAGE_SIZE = 50
 
-function ListeningHistory({ listens, className }: ListeningHistoryProps) {
+function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps) {
   const [query, setQuery] = useState("")
   const [fromValue, setFromValue] = useState("")
   const [toValue, setToValue] = useState("")
+  const [listens, setListens] = useState<ListeningHistoryEntry[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fromDate = useMemo(() => parseDateTimeInput(fromValue), [fromValue])
   const toDate = useMemo(() => parseDateTimeInput(toValue), [toValue])
-  const normalizedQuery = query.trim().toLowerCase()
   const isRangeInvalid = Boolean(
-    fromDate &&
-      toDate &&
-      fromDate.getTime() > toDate.getTime()
+    fromDate && toDate && fromDate.getTime() > toDate.getTime()
   )
 
-  const filteredListens = useMemo(() => {
-    if (!listens.length) {
-      return []
+  // Fetch data when filters change
+  useEffect(() => {
+    let active = true
+    const supabase = createSupabaseBrowserClient()
+
+    const fetchData = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      const timeParams = timeframeToParams(timeframeFilter)
+      const result = await getListeningHistory(supabase, {
+        search_query: query.trim() || null,
+        start_date: fromDate?.toISOString() ?? timeParams.start_date,
+        end_date: toDate?.toISOString() ?? timeParams.end_date,
+        limit_count: PAGE_SIZE,
+        offset_count: currentPage * PAGE_SIZE,
+      })
+
+      if (!active) return
+
+      setIsLoading(false)
+
+      if (!result.success) {
+        setError("Failed to load listening history")
+        console.error(result.error)
+        return
+      }
+
+      setListens(result.data.data)
+      setTotalCount(result.data.totalCount)
     }
 
+    if (!isRangeInvalid) {
+      void fetchData()
+    }
+
+    return () => {
+      active = false
+    }
+  }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid])
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [timeframeFilter, query, fromDate, toDate])
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const hasNextPage = currentPage < totalPages - 1
+  const hasPrevPage = currentPage > 0
+
+  const displayListens = useMemo(() => {
+    if (isRangeInvalid) {
+      return []
+    }
     return listens
-      .filter((listen) => {
-        const matchesQuery = normalizedQuery
-          ? [listen.track, listen.artist].some((value) =>
-              value?.toLowerCase().includes(normalizedQuery)
-            )
-          : true
-
-        if (!matchesQuery) {
-          return false
-        }
-
-        const ts = listen.ts ? new Date(listen.ts) : null
-        const hasValidTimestamp = ts && !Number.isNaN(ts.getTime())
-
-        if (fromDate) {
-          if (!hasValidTimestamp || ts!.getTime() < fromDate.getTime()) {
-            return false
-          }
-        }
-
-        if (toDate) {
-          if (!hasValidTimestamp || ts!.getTime() > toDate.getTime()) {
-            return false
-          }
-        }
-
-        return true
-      })
-      .sort(sortByTimestampDesc)
-  }, [fromDate, listens, normalizedQuery, toDate])
-
-  const resultsCount = filteredListens.length
+  }, [listens, isRangeInvalid])
 
   return (
     <Card className={cn("shadow-none", className)}>
@@ -178,10 +198,45 @@ function ListeningHistory({ listens, className }: ListeningHistoryProps) {
             The start of your range must be before the end time.
           </p>
         ) : null}
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Showing {resultsCount} {resultsCount === 1 ? "play" : "plays"}.
+        {error ? (
+          <p role="alert" className="text-sm font-medium text-destructive">
+            {error}
           </p>
+        ) : null}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? (
+                "Loading..."
+              ) : (
+                <>
+                  Showing {displayListens.length} of {totalCount}{" "}
+                  {totalCount === 1 ? "play" : "plays"}
+                  {currentPage > 0 && ` (page ${currentPage + 1} of ${totalPages})`}
+                </>
+              )}
+            </p>
+            {totalPages > 1 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  disabled={!hasPrevPage || isLoading}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  disabled={!hasNextPage || isLoading}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
           <Table aria-label="Listening history results">
             <TableHeader>
               <TableRow>
@@ -194,8 +249,8 @@ function ListeningHistory({ listens, className }: ListeningHistoryProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredListens.length ? (
-                filteredListens.map((listen, index) => {
+              {displayListens.length ? (
+                displayListens.map((listen, index) => {
                   const timestamp = listen.ts ? new Date(listen.ts) : null
                   const formattedTimestamp =
                     timestamp && !Number.isNaN(timestamp.getTime())
