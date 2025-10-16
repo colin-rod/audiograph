@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
-import { FeedbackModal } from './feedback-modal'
+
+import { capturePostHogEvent } from '@/lib/monitoring/posthog/client'
 import { cn } from '@/lib/utils'
+import { FeedbackModal } from './feedback-modal'
 
 interface FeedbackButtonProps {
   className?: string
@@ -16,15 +18,18 @@ interface FeedbackButtonProps {
  */
 export function FeedbackButton({ className }: FeedbackButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleClick = () => {
     setIsModalOpen(true)
+    capturePostHogEvent('feedback_modal_opened')
   }
 
   return (
     <>
       {/* Floating Action Button with Text */}
       <button
+        ref={buttonRef}
         onClick={handleClick}
         className={cn(
           // Base styles
@@ -45,13 +50,19 @@ export function FeedbackButton({ className }: FeedbackButtonProps) {
         )}
         aria-label="Share feedback"
         title="Share your feedback with us"
+        aria-haspopup="dialog"
+        aria-expanded={isModalOpen}
       >
         <MessageSquare className="w-5 h-5" aria-hidden="true" />
         <span className="font-medium text-sm whitespace-nowrap">Feedback</span>
       </button>
 
       {/* Feedback Modal */}
-      <FeedbackModal open={isModalOpen} onOpenChange={setIsModalOpen} />
+      <FeedbackModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        triggerRef={buttonRef}
+      />
     </>
   )
 }
