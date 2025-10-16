@@ -13,6 +13,13 @@ import {
 import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
 import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboard/listening-history"
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
+import {
+  PersonalMilestones,
+  PersonalMilestonesSkeleton,
+  type AnniversaryCallout,
+  type ListeningDiversityScore,
+  type TopDayHighlight,
+} from "@/components/dashboard/personal-milestones"
 import { ListeningStreakCard, ListeningStreakCardSkeleton } from "@/components/dashboard/listening-streak-card"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
@@ -107,6 +114,18 @@ const toListenSummaryRow = (value: unknown): ListenSummaryRow | null => {
 }
 
 const MS_PER_HOUR = 1000 * 60 * 60
+const DAY_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+})
+
+const ALL_TIME_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+})
 const MS_PER_DAY = 1000 * 60 * 60 * 24
 
 const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats => {
@@ -167,6 +186,265 @@ const calculateDashboardStats = (listens: ListenSummaryRow[]): DashboardStats =>
     tracks,
     topArtist: topArtistEntry?.[0] ?? null,
     mostActiveYear: mostActiveYearEntry?.[0] ?? null,
+  }
+}
+
+const calculateTopDayHighlight = (
+  listens: ListenSummaryRow[]
+): TopDayHighlight | null => {
+  const dayTotals = new Map<
+    string,
+    { totalMs: number; listens: ListenSummaryRow[] }
+  >()
+
+  listens.forEach((listen) => {
+    if (!listen.ts) {
+      return
+    }
+
+    const tsDate = new Date(listen.ts)
+    if (Number.isNaN(tsDate.getTime())) {
+      return
+    }
+
+    const dayKey = `${tsDate.getUTCFullYear()}-${String(
+      tsDate.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(tsDate.getUTCDate()).padStart(2, "0")}`
+    const msPlayed = listen.ms_played ?? 0
+    const existing = dayTotals.get(dayKey)
+
+    if (existing) {
+      existing.totalMs += msPlayed
+      existing.listens.push(listen)
+    } else {
+      dayTotals.set(dayKey, { totalMs: msPlayed, listens: [listen] })
+    }
+  })
+
+  const sortedDays = Array.from(dayTotals.entries()).sort(
+    ([dayA, dataA], [dayB, dataB]) => {
+      if (dataA.totalMs === dataB.totalMs) {
+        return dayA.localeCompare(dayB)
+      }
+
+      return dataB.totalMs - dataA.totalMs
+    }
+  )
+
+  const topDayEntry = sortedDays[0]
+
+  if (!topDayEntry) {
+    return null
+  }
+
+  const [dayKey, dayData] = topDayEntry
+
+  if (dayData.totalMs <= 0) {
+    return null
+  }
+
+  const trackTotals = new Map<
+    string,
+    { info: { track: string; artist: string | null }; ms: number }
+  >()
+  const artistTotals = new Map<string, number>()
+
+  dayData.listens.forEach((listen) => {
+    const msPlayed = listen.ms_played ?? 0
+
+    if (listen.track) {
+      const key = `${listen.track}__${listen.artist ?? ""}`
+      const entry =
+        trackTotals.get(key) ?? {
+          info: { track: listen.track, artist: listen.artist ?? null },
+          ms: 0,
+        }
+      entry.ms += msPlayed
+      trackTotals.set(key, entry)
+    }
+
+    if (listen.artist) {
+      artistTotals.set(
+        listen.artist,
+        (artistTotals.get(listen.artist) ?? 0) + msPlayed
+      )
+    }
+  })
+
+  const trackHighlights = Array.from(trackTotals.values())
+    .map(({ info, ms }) => ({
+      track: info.track,
+      artist: info.artist,
+      hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+    }))
+    .sort((a, b) => {
+      if (b.hours === a.hours) {
+        return a.track.localeCompare(b.track)
+      }
+
+      return b.hours - a.hours
+    })
+    .slice(0, 3)
+
+  const artistHighlights = Array.from(artistTotals.entries())
+    .map(([artist, ms]) => ({
+      artist,
+      hours: Number((ms / MS_PER_HOUR).toFixed(1)),
+    }))
+    .sort((a, b) => {
+      if (b.hours === a.hours) {
+        return a.artist.localeCompare(b.artist)
+      }
+
+      return b.hours - a.hours
+    })
+    .slice(0, 3)
+
+  const date = new Date(`${dayKey}T00:00:00.000Z`)
+
+  return {
+    date: date.toISOString(),
+    label: DAY_LABEL_FORMATTER.format(date),
+    totalHours: Number((dayData.totalMs / MS_PER_HOUR).toFixed(1)),
+    trackHighlights,
+    artistHighlights,
+  }
+}
+
+const calculateListeningDiversity = (
+  listens: ListenSummaryRow[]
+): ListeningDiversityScore | null => {
+  if (listens.length === 0) {
+    return null
+  }
+
+  const totalMs = listens.reduce(
+    (acc, listen) => acc + (listen.ms_played ?? 0),
+    0
+  )
+
+  if (totalMs <= 0) {
+    return null
+  }
+
+  const uniqueArtists = new Set(
+    listens.map((listen) => listen.artist).filter(Boolean)
+  ).size
+  const uniqueTracks = new Set(
+    listens.map((listen) => listen.track).filter(Boolean)
+  ).size
+  const totalHours = Number((totalMs / MS_PER_HOUR).toFixed(1))
+
+  const normalizedArtists = Math.min(uniqueArtists / 40, 1)
+  const normalizedTracks = Math.min(uniqueTracks / 60, 1)
+  const normalizedHours = Math.min(totalHours / 200, 1)
+
+  const score = Math.round(
+    (normalizedArtists * 0.4 + normalizedTracks * 0.4 + normalizedHours * 0.2) *
+      100
+  )
+
+  let tierLabel: ListeningDiversityScore["tierLabel"]
+  let summary: ListeningDiversityScore["summary"]
+
+  if (score >= 80) {
+    tierLabel = "Explorer"
+    summary =
+      "You bounce between artists and moods — no genre is off limits." 
+  } else if (score >= 55) {
+    tierLabel = "Adventurer"
+    summary = "You balance trusted favorites with frequent detours." 
+  } else {
+    tierLabel = "Specialist"
+    summary = "You know what you love and keep it on repeat." 
+  }
+
+  return {
+    score,
+    tierLabel,
+    summary,
+    uniqueArtists,
+    uniqueTracks,
+    totalHours,
+  }
+}
+
+const calculateAnniversaryCallout = (
+  listens: ListenSummaryRow[]
+): AnniversaryCallout | null => {
+  const validDates = listens
+    .map((listen) => listen.ts)
+    .filter((ts): ts is string => typeof ts === "string")
+    .map((ts) => new Date(ts))
+    .filter((date) => !Number.isNaN(date.getTime()))
+
+  if (validDates.length === 0) {
+    return null
+  }
+
+  const firstDate = validDates.sort((a, b) => a.getTime() - b.getTime())[0]
+
+  if (!firstDate) {
+    return null
+  }
+
+  const firstUtc = new Date(
+    Date.UTC(
+      firstDate.getUTCFullYear(),
+      firstDate.getUTCMonth(),
+      firstDate.getUTCDate()
+    )
+  )
+
+  const now = new Date()
+  const todayUtc = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate()
+    )
+  )
+
+  let upcomingYear = todayUtc.getUTCFullYear()
+  const anniversaryThisYear = new Date(
+    Date.UTC(
+      upcomingYear,
+      firstUtc.getUTCMonth(),
+      firstUtc.getUTCDate()
+    )
+  )
+
+  if (anniversaryThisYear <= todayUtc) {
+    upcomingYear += 1
+  }
+
+  if (upcomingYear <= firstUtc.getUTCFullYear()) {
+    upcomingYear = firstUtc.getUTCFullYear() + 1
+  }
+
+  const upcomingAnniversary = new Date(
+    Date.UTC(
+      upcomingYear,
+      firstUtc.getUTCMonth(),
+      firstUtc.getUTCDate()
+    )
+  )
+
+  const msUntil = upcomingAnniversary.getTime() - todayUtc.getTime()
+  const daysUntil = Math.max(
+    0,
+    Math.ceil(msUntil / (1000 * 60 * 60 * 24))
+  )
+
+  return {
+    firstListenDate: firstUtc.toISOString(),
+    firstListenLabel: ALL_TIME_DATE_FORMATTER.format(firstUtc),
+    upcomingAnniversaryDate: upcomingAnniversary.toISOString(),
+    upcomingAnniversaryLabel: ALL_TIME_DATE_FORMATTER.format(
+      upcomingAnniversary
+    ),
+    anniversaryNumber: upcomingYear - firstUtc.getUTCFullYear(),
+    daysUntil,
   }
 }
 
@@ -419,8 +697,20 @@ const calculateListeningClock = (listens: ListenSummaryRow[]) => {
     })
 }
 
+type DashboardPersonalMilestones = {
+  topDayHighlight: TopDayHighlight | null
+  listeningDiversity: ListeningDiversityScore | null
+}
+
+type PersonalMilestoneSectionData = {
+  topDayHighlight: TopDayHighlight | null
+  listeningDiversity: ListeningDiversityScore | null
+  anniversary: AnniversaryCallout | null
+}
+
 type DashboardData = {
   summary: DashboardStats
+  personalMilestones: DashboardPersonalMilestones
   topArtists: ReturnType<typeof calculateTopArtists>
   topTracks: ReturnType<typeof calculateTopTracks>
   listeningTrends: ReturnType<typeof calculateListeningTrends>
@@ -429,8 +719,16 @@ type DashboardData = {
   listeningStreak: ReturnType<typeof calculateListeningStreak>
 }
 
+const calculateDashboardPersonalMilestones = (
+  listens: ListenSummaryRow[]
+): DashboardPersonalMilestones => ({
+  topDayHighlight: calculateTopDayHighlight(listens),
+  listeningDiversity: calculateListeningDiversity(listens),
+})
+
 const calculateDashboardData = (listens: ListenSummaryRow[]): DashboardData => ({
   summary: calculateDashboardStats(listens),
+  personalMilestones: calculateDashboardPersonalMilestones(listens),
   topArtists: calculateTopArtists(listens),
   topTracks: calculateTopTracks(listens),
   listeningTrends: calculateListeningTrends(listens),
@@ -597,6 +895,18 @@ export default function DashboardPage() {
     }
   }, [hasShareableInsights])
 
+  const personalMilestones = useMemo<PersonalMilestoneSectionData | null>(() => {
+    if (!dashboardData) {
+      return null
+    }
+
+    return {
+      topDayHighlight: dashboardData.personalMilestones.topDayHighlight,
+      listeningDiversity: dashboardData.personalMilestones.listeningDiversity,
+      anniversary: calculateAnniversaryCallout(listens ?? []),
+    }
+  }, [dashboardData, listens])
+
   const headerSection = (
     <section className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-2">
@@ -655,6 +965,33 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-10">
       {headerSection}
+      <section aria-label="Personal milestones and summaries">
+        <AnimatePresence mode="wait">
+          {personalMilestones ? (
+            <motion.div
+              key={`personal-milestones-${activeTimeframeKey}-${listens?.length ?? 0}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <PersonalMilestones
+                topDayHighlight={personalMilestones.topDayHighlight}
+                diversityScore={personalMilestones.listeningDiversity}
+                anniversary={personalMilestones.anniversary}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`personal-milestones-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <PersonalMilestonesSkeleton />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
       <AnimatePresence mode="wait">
         {dashboardData ? (
           <motion.div
