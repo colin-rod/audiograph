@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 
 import {
   DashboardSummary,
@@ -15,6 +16,7 @@ import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/t
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
+import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 
 import {
   TimeframeFilter,
@@ -460,6 +462,8 @@ export default function DashboardPage() {
     return calculateDashboardData(filteredListens)
   }, [filteredListens])
 
+  const sectionMotion = useDashboardSectionTransition()
+
   const headerSection = (
     <section className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-2">
@@ -508,40 +512,134 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-10">
       {headerSection}
-      {dashboardData ? (
-        <DashboardSummary stats={dashboardData.summary} />
-      ) : (
-        <DashboardSummarySkeleton />
-      )}
+      <AnimatePresence mode="wait">
+        {dashboardData ? (
+          <motion.div
+            key={`dashboard-summary-${selectedTimeframe}`}
+            initial={sectionMotion.initial}
+            animate={sectionMotion.animate}
+            exit={sectionMotion.exit}
+          >
+            <DashboardSummary stats={dashboardData.summary} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="dashboard-summary-skeleton"
+            initial={sectionMotion.initial}
+            animate={sectionMotion.animate}
+            exit={sectionMotion.exit}
+          >
+            <DashboardSummarySkeleton />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <section
         aria-label="Artist and track insights"
         className="grid gap-6 lg:grid-cols-2"
       >
-        {dashboardData ? (
-          <TopArtistsChart data={dashboardData.topArtists} />
-        ) : (
-          <TopArtistsChartSkeleton />
-        )}
-        {dashboardData ? (
-          <TopTracksTable data={dashboardData.topTracks} />
-        ) : (
-          <TopTracksTableSkeleton />
-        )}
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`top-artists-${selectedTimeframe}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <TopArtistsChart data={dashboardData.topArtists} className="h-full" />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="top-artists-skeleton"
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <TopArtistsChartSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`top-tracks-${selectedTimeframe}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <TopTracksTable data={dashboardData.topTracks} className="h-full" />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="top-tracks-skeleton"
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <TopTracksTableSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
       <section
         aria-label="Listening trends and clock"
         className="grid gap-6 lg:grid-cols-2"
       >
-        {dashboardData ? (
-          <ListeningTrendsChart data={dashboardData.listeningTrends} />
-        ) : (
-          <ListeningTrendsChartSkeleton />
-        )}
-        {dashboardData ? (
-          <ListeningClockHeatmap data={dashboardData.listeningClock} />
-        ) : (
-          <ListeningClockHeatmapSkeleton />
-        )}
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`listening-trends-${selectedTimeframe}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningTrendsChart
+                data={dashboardData.listeningTrends}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="listening-trends-skeleton"
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningTrendsChartSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {dashboardData ? (
+            <motion.div
+              key={`listening-clock-${selectedTimeframe}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningClockHeatmap
+                data={dashboardData.listeningClock}
+                className="h-full"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="listening-clock-skeleton"
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+              className="h-full"
+            >
+              <ListeningClockHeatmapSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
     </div>
   )
