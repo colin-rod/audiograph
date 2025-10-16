@@ -108,6 +108,8 @@ type StatusState = {
 }
 
 const BATCH_SIZE = 500
+const SUPABASE_CONFIG_ERROR_MESSAGE =
+  'Supabase environment variables are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable uploads.'
 
 const formatFileSize = (size: number) => {
   if (size >= 1024 * 1024) {
@@ -219,14 +221,29 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
-  const [status, setStatus] = useState<StatusState>({
-    state: 'idle',
-    message: 'Select a Spotify listening history JSON file to begin.',
-  })
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error(error)
+      return null
+    }
+  }, [])
+
+  const [status, setStatus] = useState<StatusState>(() =>
+    supabase
+      ? {
+          state: 'idle',
+          message: 'Select a Spotify listening history JSON file to begin.',
+        }
+      : {
+          state: 'error',
+          message: SUPABASE_CONFIG_ERROR_MESSAGE,
+        },
+  )
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
@@ -238,8 +255,12 @@ export default function UploadPage() {
   )
 
   const handleResetRequest = useCallback(() => {
+    if (!supabase) {
+      setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+      return
+    }
     setIsResetDialogOpen(true)
-  }, [])
+  }, [supabase])
 
   const handleCancelReset = useCallback(() => {
     setIsResetDialogOpen(false)
@@ -247,6 +268,10 @@ export default function UploadPage() {
 
   const handleConfirmReset = useCallback(async () => {
     setIsResetDialogOpen(false)
+    if (!supabase) {
+      setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+      return
+    }
     setProgress(0)
     setSelectedFile(null)
     setStatus({
@@ -282,6 +307,13 @@ export default function UploadPage() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (!supabase) {
+        setSelectedFile(null)
+        setProgress(0)
+        setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+        return
+      }
+
       setSelectedFile(file)
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
@@ -422,6 +454,7 @@ export default function UploadPage() {
       <UploadDropzone
         onFileAccepted={handleFile}
         isBusy={
+          !supabase ||
           status.state === 'validating' ||
           status.state === 'uploading' ||
           status.state === 'resetting'
@@ -434,6 +467,7 @@ export default function UploadPage() {
           variant="outline"
           onClick={handleResetRequest}
           disabled={
+            !supabase ||
             status.state === 'validating' ||
             status.state === 'uploading' ||
             status.state === 'resetting'
