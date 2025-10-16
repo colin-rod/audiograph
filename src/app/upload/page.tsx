@@ -1,12 +1,15 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { createSupabaseClient } from '@/lib/supabaseClient'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import Link from 'next/link'
 
-export const dynamic = "force-dynamic"
+import { createSupabaseClient } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+
+export const dynamic = "force-dynamic"
 
 type SpotifyHistoryEntry = {
   endTime?: string | null
@@ -219,13 +222,19 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
+  const AUTH_CHECK_MESSAGE = 'Checking your authentication status…'
+  const SIGN_IN_MESSAGE = 'Sign in to upload your Spotify listening history.'
+  const READY_MESSAGE = 'Select a Spotify listening history JSON file to begin.'
+
   const [status, setStatus] = useState<StatusState>({
     state: 'idle',
-    message: 'Select a Spotify listening history JSON file to begin.',
+    message: AUTH_CHECK_MESSAGE,
   })
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
+  const [isAuthLoading, setIsAuthLoading] = useState(true)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
   const resetState = useCallback(
@@ -237,9 +246,93 @@ export default function UploadPage() {
     [],
   )
 
+  useEffect(() => {
+    let isMounted = true
+    setIsAuthLoading(true)
+
+    const loadSession = async () => {
+      const {
+        data: { session: initialSession },
+      } = await supabase.auth.getSession()
+
+      if (!isMounted) {
+        return
+      }
+
+      setSession(initialSession)
+      setIsAuthLoading(false)
+    }
+
+    void loadSession()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!isMounted) {
+        return
+      }
+
+      setSession(nextSession)
+      setIsAuthLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    if (isAuthLoading) {
+      setStatus((previous) => {
+        if (previous.state === 'idle' && previous.message === AUTH_CHECK_MESSAGE) {
+          return previous
+        }
+
+        if (previous.state === 'idle') {
+          return { state: 'idle', message: AUTH_CHECK_MESSAGE }
+        }
+
+        return previous
+      })
+      return
+    }
+
+    if (!session) {
+      setStatus((previous) => {
+        if (previous.state === 'idle' && previous.message === SIGN_IN_MESSAGE) {
+          return previous
+        }
+
+        return { state: 'idle', message: SIGN_IN_MESSAGE }
+      })
+      return
+    }
+
+    setStatus((previous) => {
+      if (previous.state === 'idle' && previous.message !== READY_MESSAGE) {
+        return { state: 'idle', message: READY_MESSAGE }
+      }
+
+      if (previous.state === 'error' && previous.message === SIGN_IN_MESSAGE) {
+        return { state: 'idle', message: READY_MESSAGE }
+      }
+
+      return previous
+    })
+  }, [AUTH_CHECK_MESSAGE, READY_MESSAGE, SIGN_IN_MESSAGE, isAuthLoading, session])
+
   const handleResetRequest = useCallback(() => {
+    if (!session) {
+      setStatus({
+        state: 'error',
+        message: 'You must be signed in to reset uploaded data.',
+      })
+      return
+    }
+
     setIsResetDialogOpen(true)
-  }, [])
+  }, [session])
 
   const handleCancelReset = useCallback(() => {
     setIsResetDialogOpen(false)
@@ -247,6 +340,15 @@ export default function UploadPage() {
 
   const handleConfirmReset = useCallback(async () => {
     setIsResetDialogOpen(false)
+
+    if (!session) {
+      setStatus({
+        state: 'error',
+        message: 'You must be signed in to reset uploaded data.',
+      })
+      return
+    }
+
     setProgress(0)
     setSelectedFile(null)
     setStatus({
@@ -278,10 +380,15 @@ export default function UploadPage() {
           'An unexpected error occurred while deleting data. Please try again.',
       })
     }
-  }, [supabase])
+  }, [session, supabase])
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (!session) {
+        resetState('You must be signed in to upload your listening history.', 'error')
+        return
+      }
+
       setSelectedFile(file)
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
@@ -379,9 +486,12 @@ export default function UploadPage() {
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
     },
-    [resetState, supabase],
+    [resetState, session, supabase],
   )
 
+  const isBusy =
+    status.state === 'validating' || status.state === 'uploading' || status.state === 'resetting'
+  const uploadDisabled = isBusy || !session
 
   return (
     <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
@@ -391,13 +501,19 @@ export default function UploadPage() {
           Drag in the JSON exports downloaded from Spotify to add them to Supabase.
         </p>
       </div>
+      {!isAuthLoading && !session ? (
+        <div className="rounded-md border border-dashed border-muted-foreground/30 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Sign in to upload and manage your listening history.
+          </p>
+          <Button asChild className="mt-3">
+            <Link href="/sign-in">Go to sign in</Link>
+          </Button>
+        </div>
+      ) : null}
       <UploadDropzone
         onFileAccepted={handleFile}
-        isBusy={
-          status.state === 'validating' ||
-          status.state === 'uploading' ||
-          status.state === 'resetting'
-        }
+        isBusy={uploadDisabled}
         selectedFile={selectedFile}
       />
       <div className="flex justify-center">
@@ -405,11 +521,7 @@ export default function UploadPage() {
           type="button"
           variant="outline"
           onClick={handleResetRequest}
-          disabled={
-            status.state === 'validating' ||
-            status.state === 'uploading' ||
-            status.state === 'resetting'
-          }
+          disabled={isBusy || !session}
           aria-label="Reset uploaded data"
         >
           Reset uploaded data
