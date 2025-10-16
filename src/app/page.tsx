@@ -4,6 +4,7 @@ import { createSupabaseClient } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 type SpotifyHistoryEntry = {
   endTime?: string | null
@@ -222,6 +223,7 @@ export default function UploadPage() {
   })
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
   const resetState = useCallback(
@@ -233,15 +235,16 @@ export default function UploadPage() {
     [],
   )
 
-  const handleReset = useCallback(async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete all uploaded listens? This action cannot be undone.',
-    )
+  const handleResetRequest = useCallback(() => {
+    setIsResetDialogOpen(true)
+  }, [])
 
-    if (!confirmed) {
-      return
-    }
+  const handleCancelReset = useCallback(() => {
+    setIsResetDialogOpen(false)
+  }, [])
 
+  const handleConfirmReset = useCallback(async () => {
+    setIsResetDialogOpen(false)
     setProgress(0)
     setSelectedFile(null)
     setStatus({
@@ -399,7 +402,7 @@ export default function UploadPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={handleReset}
+          onClick={handleResetRequest}
           disabled={
             status.state === 'validating' ||
             status.state === 'uploading' ||
@@ -410,6 +413,15 @@ export default function UploadPage() {
           Reset uploaded data
         </Button>
       </div>
+      <ConfirmDialog
+        open={isResetDialogOpen}
+        onCancel={handleCancelReset}
+        onConfirm={handleConfirmReset}
+        title="Delete uploaded listens?"
+        description="This will remove all uploaded listening history from Supabase. This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+      />
       <div className="space-y-2">
         {(status.state === 'uploading' || progress > 0) && (
           <Progress value={progress} aria-live="polite" />
