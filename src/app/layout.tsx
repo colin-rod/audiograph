@@ -4,8 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AuthButtonGroup } from "@/components/auth/auth-button-group";
-import { ThemeProvider } from "@/components/providers/theme-provider";
-import { Toaster } from "@/components/providers/toaster";
+import { AppProviders } from "@/components/providers/app-providers";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
 
 const geistSans = Geist({
@@ -32,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
+        <AppProviders>
           <div
             className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
           >
@@ -62,8 +61,7 @@ export default function RootLayout({
             </main>
             <FeedbackButton />
           </div>
-          <Toaster />
-        </ThemeProvider>
+        </AppProviders>
       </body>
     </html>
   );

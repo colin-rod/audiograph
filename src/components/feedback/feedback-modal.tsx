@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect, useId, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Bug, Sparkles, Palette, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+
+import { capturePostHogEvent } from '@/lib/monitoring/posthog/client'
 import { Button } from '@/components/ui/button'
 import {
   FeedbackType,
@@ -12,6 +13,7 @@ import {
   type FeedbackFormData,
   type FeedbackResponse,
 } from '@/lib/types/feedback'
+import { cn } from '@/lib/utils'
 
 const SUPABASE_CONFIG_ERROR_MESSAGE =
   'Supabase environment variables are not configured. Feedback submissions are currently unavailable. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
@@ -239,6 +241,10 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
       // Success!
       toast.success(data.message || 'Thank you for your feedback!')
+      capturePostHogEvent('feedback_submitted', {
+        type: formData.type,
+        hasScreenshots: screenshotUrls.length > 0,
+      })
 
       // Reset form and close modal
       screenshotPreviews.forEach(url => URL.revokeObjectURL(url))
@@ -255,6 +261,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           ? error.message
           : 'Failed to submit feedback. Please try again.'
       )
+      capturePostHogEvent('feedback_submission_failed', {
+        type: formData.type,
+        hasScreenshots: Boolean(formData.screenshots?.length),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
     } finally {
       setIsSubmitting(false)
     }

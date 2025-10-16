@@ -62,6 +62,45 @@ The project ships with a Vitest + Testing Library setup tuned for the App Router
 4. Refactor with confidence, keeping the watch run green.
 5. Finish with `npm run lint`, `npm run typecheck`, and `npm run test` (plus `npm run test:coverage` when you want detailed metrics) before raising a PR.
 
+## Monitoring & Analytics
+
+A lightweight telemetry layer ships with the app to help surface production errors and usage patterns. Both integrations stay dormant unless the required environment variables are present.
+
+### Sentry error reporting
+
+- Configure the DSN in both server and browser environments:
+
+  ```bash
+  SENTRY_DSN="https://PUBLIC_KEY@o123.ingest.sentry.io/456"
+  NEXT_PUBLIC_SENTRY_DSN="https://PUBLIC_KEY@o123.ingest.sentry.io/456"
+  ```
+
+- Optional environment metadata:
+
+  ```bash
+  SENTRY_ENVIRONMENT="production"
+  SENTRY_RELEASE="v1.0.0"
+  NEXT_PUBLIC_SENTRY_ENVIRONMENT="production"
+  NEXT_PUBLIC_SENTRY_RELEASE="v1.0.0"
+  ```
+
+- `instrumentation.ts` hooks global `uncaughtException` and `unhandledRejection` handlers on the Node runtime so catastrophic failures make it to Sentry even when they bubble past application code.
+- `src/components/providers/sentry-provider.tsx` registers `window` listeners for client-side errors and unhandled promise rejections.
+- For manual reporting, import `captureServerException`/`captureClientException` from `src/lib/monitoring/sentry` and call them inside error branches. The API posts directly to the Sentry Store endpoint so the SDK dependency footprint stays at zero.
+
+### PostHog product analytics
+
+- Supply your project key (and optionally a custom host) via:
+
+  ```bash
+  NEXT_PUBLIC_POSTHOG_KEY="phc_ABC123"
+  NEXT_PUBLIC_POSTHOG_HOST="https://app.posthog.com" # optional, defaults to the US multi-tenant host
+  ```
+
+- `src/components/providers/posthog-provider.tsx` initialises an anonymous distinct ID and captures App Router page transitions.
+- Helper utilities in `src/lib/monitoring/posthog/client.ts` expose `capturePostHogEvent` for one-off events. The feedback flow already tracks modal opens, successful submissions, and submission failures.
+- Distinct IDs are persisted in `localStorage` so the analytics timeline remains consistent between visits without relying on third-party cookies.
+
 ## Continuous Integration
 
 A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on pushes to `main` and every pull request. The job installs dependencies with `npm ci` and executes linting, static type checks, and the Vitest unit suite to guard the TDD pipeline in CI.
