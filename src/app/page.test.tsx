@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -48,13 +48,18 @@ describe("UploadPage reset controls", () => {
   })
 
   it("confirms with the user and deletes listens on approval", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
     const user = userEvent.setup()
 
     render(<UploadPage />)
 
     const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
     await user.click(resetButton)
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Delete uploaded listens?",
+    })
+
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }))
 
     await waitFor(() => expect(fromMock).toHaveBeenCalledWith("listens"))
     expect(deleteMock).toHaveBeenCalled()
@@ -66,17 +71,24 @@ describe("UploadPage reset controls", () => {
       ).toBeInTheDocument()
     )
 
-    confirmSpy.mockRestore()
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull()
+    )
   })
 
   it("does not call Supabase when the user cancels", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false)
     const user = userEvent.setup()
 
     render(<UploadPage />)
 
     const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
     await user.click(resetButton)
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Delete uploaded listens?",
+    })
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
 
     expect(fromMock).not.toHaveBeenCalled()
     expect(deleteMock).not.toHaveBeenCalled()
@@ -85,18 +97,25 @@ describe("UploadPage reset controls", () => {
       screen.getByText("Select a Spotify listening history JSON file to begin.")
     ).toBeInTheDocument()
 
-    confirmSpy.mockRestore()
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull()
+    )
   })
 
   it("surfaces Supabase errors to the user", async () => {
     notMock.mockResolvedValueOnce({ error: { message: "failure" } })
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
     const user = userEvent.setup()
 
     render(<UploadPage />)
 
     const resetButton = screen.getByRole("button", { name: /reset uploaded data/i })
     await user.click(resetButton)
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Delete uploaded listens?",
+    })
+
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }))
 
     await waitFor(() => expect(notMock).toHaveBeenCalled())
 
@@ -106,6 +125,8 @@ describe("UploadPage reset controls", () => {
       ).toBeInTheDocument()
     )
 
-    confirmSpy.mockRestore()
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull()
+    )
   })
 })
