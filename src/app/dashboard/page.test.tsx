@@ -26,6 +26,8 @@ type SupabaseSelectResult = {
 
 const {
   usePathnameMock,
+  useRouterMock,
+  pushMock,
   selectMock,
   fromMock,
   supabaseBrowserClient,
@@ -33,17 +35,42 @@ const {
   getSessionMock,
   redirectMock,
   createSupabaseClientMock,
+  getUserMock,
+  onAuthStateChangeMock,
+  unsubscribeMock,
 } = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
     data: [],
     error: null,
   }))
+  const getUser = vi.fn(async () => ({
+    data: { user: { id: "user-1", email: "user@example.com" } },
+    error: null,
+  }))
+  const unsubscribe = vi.fn()
+  const onAuthStateChange = vi.fn(() => ({
+    data: {
+      subscription: {
+        unsubscribe,
+      },
+    },
+  }))
   const from = vi.fn(() => ({ select }))
-  const supabaseClient = { from }
+  const supabaseClient = {
+    from,
+    auth: {
+      getUser,
+      onAuthStateChange,
+    },
+  }
   const createClient = vi.fn(() => supabaseClient)
   const createSupabaseClient = vi.fn(() => ({
     from,
+  }))
+  const push = vi.fn()
+  const useRouter = vi.fn(() => ({
+    push,
   }))
   const getSession = vi.fn(
     async (): Promise<{
@@ -58,6 +85,8 @@ const {
 
   return {
     usePathnameMock: pathname,
+    useRouterMock: useRouter,
+    pushMock: push,
     selectMock: select,
     fromMock: from,
     supabaseBrowserClient: supabaseClient,
@@ -65,6 +94,9 @@ const {
     getSessionMock: getSession,
     redirectMock: redirect,
     createSupabaseClientMock: createSupabaseClient,
+    getUserMock: getUser,
+    onAuthStateChangeMock: onAuthStateChange,
+    unsubscribeMock: unsubscribe,
   }
 })
 
@@ -89,12 +121,14 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameMock(),
+  useRouter: () => useRouterMock(),
   redirect: redirectMock,
 }))
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: supabaseBrowserClient,
   createSupabaseBrowserClient: () => createSupabaseBrowserClientMock(),
+  createSupabaseClient: () => createSupabaseClientMock(),
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -129,6 +163,11 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 describe("Dashboard page", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/dashboard")
+    pushMock.mockReset()
+    useRouterMock.mockReset()
+    useRouterMock.mockImplementation(() => ({
+      push: pushMock,
+    }))
 
     selectMock.mockReset()
     selectMock.mockImplementation(async () => ({
@@ -138,6 +177,22 @@ describe("Dashboard page", () => {
 
     fromMock.mockReset()
     fromMock.mockImplementation(() => ({ select: selectMock }))
+
+    getUserMock.mockReset()
+    getUserMock.mockResolvedValue({
+      data: { user: { id: "user-1", email: "user@example.com" } },
+      error: null,
+    })
+
+    unsubscribeMock.mockReset()
+    onAuthStateChangeMock.mockReset()
+    onAuthStateChangeMock.mockImplementation(() => ({
+      data: {
+        subscription: {
+          unsubscribe: unsubscribeMock,
+        },
+      },
+    }))
 
     createSupabaseBrowserClientMock.mockReset()
     createSupabaseBrowserClientMock.mockImplementation(() => supabaseBrowserClient)
