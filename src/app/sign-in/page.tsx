@@ -130,7 +130,7 @@ const SignInContent = () => {
               {statusMessage}
             </p>
           ) : null}
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
                 Email address
@@ -146,13 +146,24 @@ const SignInContent = () => {
                 required
               />
             </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={status === "loading"}
-            >
-              {status === "loading" ? "Sending email..." : "Send magic link"}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={status === "loading"}
+              >
+                {status === "loading" ? "Sending email..." : "Send magic link"}
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full"
+                asChild
+              >
+                <Link href="/" aria-label="Continue without logging in">
+                  Continue without login
+                </Link>
+              </Button>
+            </div>
           </form>
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Want to go back? {" "}
