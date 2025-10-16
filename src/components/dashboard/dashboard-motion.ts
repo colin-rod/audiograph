@@ -10,8 +10,8 @@ type MotionConfig = {
   exit: TargetAndTransition
 }
 
-const ENTER_EASING: Transition["ease"] = [0.21, 0.47, 0.32, 0.98]
-const EXIT_EASING: Transition["ease"] = [0.4, 0, 0.2, 1]
+const ENTER_EASING: [number, number, number, number] = [0.21, 0.47, 0.32, 0.98]
+const EXIT_EASING: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 export function useDashboardSectionTransition(): MotionConfig {
   const prefersReducedMotion = useReducedMotion()
