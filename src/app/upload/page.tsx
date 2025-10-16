@@ -1,111 +1,18 @@
 'use client'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createSupabaseClient } from '@/lib/supabaseClient'
+import {
+  parseSpotifyHistory,
+  SpotifyHistoryParseError,
+  type ListenInsert,
+} from '@/lib/spotifyHistory'
+import { useUploadStatus, type UploadStatusState } from '@/lib/useUploadStatus'
 
 export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-
-type SpotifyHistoryEntry = {
-  endTime?: string | null
-  ts?: string | null
-  master_metadata_album_artist_name?: string | null
-  artistName?: string | null
-  master_metadata_track_name?: string | null
-  trackName?: string | null
-  msPlayed?: number | null
-  ms_played?: number | null
-}
-
-type ListenInsert = {
-  ts: Date
-  artist: string | null
-  track: string | null
-  ms_played: number | null
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
-
-const toSpotifyHistoryEntry = (value: unknown): SpotifyHistoryEntry | null => {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const endTime =
-    typeof value['endTime'] === 'string' ? (value['endTime'] as string) : null
-  const ts =
-    typeof value['ts'] === 'string' ? (value['ts'] as string) : null
-  const albumArtist =
-    typeof value['master_metadata_album_artist_name'] === 'string'
-      ? (value['master_metadata_album_artist_name'] as string)
-      : null
-  const artistName =
-    typeof value['artistName'] === 'string'
-      ? (value['artistName'] as string)
-      : null
-  const trackName =
-    typeof value['master_metadata_track_name'] === 'string'
-      ? (value['master_metadata_track_name'] as string)
-      : null
-  const fallbackTrackName =
-    typeof value['trackName'] === 'string'
-      ? (value['trackName'] as string)
-      : null
-  const msPlayed =
-    typeof value['msPlayed'] === 'number'
-      ? (value['msPlayed'] as number)
-      : null
-  const msPlayedSnake =
-    typeof value['ms_played'] === 'number'
-      ? (value['ms_played'] as number)
-      : null
-
-  const entry: SpotifyHistoryEntry = {
-    endTime,
-    ts,
-    master_metadata_album_artist_name: albumArtist,
-    artistName,
-    master_metadata_track_name: trackName,
-    trackName: fallbackTrackName,
-    msPlayed,
-    ms_played: msPlayedSnake,
-  }
-
-  return entry
-}
-
-const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
-  const timestamp = entry.endTime ?? entry.ts
-  if (!timestamp) {
-    return null
-  }
-
-  const parsedDate = new Date(timestamp)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null
-  }
-
-  const msPlayed = entry.msPlayed ?? entry.ms_played ?? null
-  const artist =
-    entry.master_metadata_album_artist_name ?? entry.artistName ?? null
-  const track =
-    entry.master_metadata_track_name ?? entry.trackName ?? null
-
-  return {
-    ts: parsedDate,
-    artist,
-    track,
-    ms_played: msPlayed,
-  }
-}
-
-type StatusState = {
-  state: 'idle' | 'validating' | 'uploading' | 'resetting' | 'success' | 'error'
-  message: string
-}
 
 const BATCH_SIZE = 500
 
@@ -219,22 +126,28 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
-  const [status, setStatus] = useState<StatusState>({
-    state: 'idle',
-    message: 'Select a Spotify listening history JSON file to begin.',
-  })
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
+  const {
+    status,
+    setError,
+    setResetting,
+    setSuccess,
+    setUploading,
+    setValidating,
+    updateStatus,
+    isBusy,
+  } = useUploadStatus('Select a Spotify listening history JSON file to begin.')
 
   const resetState = useCallback(
-    (message: StatusState['message'], state: StatusState['state']) => {
+    (message: string, state: UploadStatusState) => {
       setProgress(0)
       setSelectedFile(null)
-      setStatus({ state, message })
+      updateStatus(state, message)
     },
-    [],
+    [updateStatus],
   )
 
   const handleResetRequest = useCallback(() => {
@@ -249,42 +162,29 @@ export default function UploadPage() {
     setIsResetDialogOpen(false)
     setProgress(0)
     setSelectedFile(null)
-    setStatus({
-      state: 'resetting',
-      message: 'Deleting existing listens from Supabase…',
-    })
+    setResetting('Deleting existing listens from Supabase…')
 
     try {
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
 
       if (error) {
         console.error(error)
-        setStatus({
-          state: 'error',
-          message: 'Supabase returned an error while deleting. Please try again.',
-        })
+        setError('Supabase returned an error while deleting. Please try again.')
         return
       }
 
-      setStatus({
-        state: 'success',
-        message: 'All uploaded listens have been deleted.',
-      })
+      setSuccess('All uploaded listens have been deleted.')
     } catch (error) {
       console.error(error)
-      setStatus({
-        state: 'error',
-        message:
-          'An unexpected error occurred while deleting data. Please try again.',
-      })
+      setError('An unexpected error occurred while deleting data. Please try again.')
     }
-  }, [supabase])
+  }, [setError, setResetting, setSuccess, supabase])
 
   const handleFile = useCallback(
     async (file: File) => {
       setSelectedFile(file)
       setProgress(0)
-      setStatus({ state: 'validating', message: 'Validating file…' })
+      setValidating('Validating file…')
 
       if (!file.name.toLowerCase().endsWith('.json')) {
         resetState('Only JSON files are supported.', 'error')
@@ -315,44 +215,21 @@ export default function UploadPage() {
         return
       }
 
-      if (!Array.isArray(parsed)) {
-        resetState('Expected an array of listening records in the JSON file.', 'error')
-        return
-      }
-
-      const parsedRows = parsed
-        .map(toSpotifyHistoryEntry)
-        .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
-        .map(toListenInsert)
-        .filter((row): row is ListenInsert => row !== null)
-
-      const uniqueRows = new Map<string, ListenInsert>()
-      for (const row of parsedRows) {
-        const key = [
-          row.ts.toISOString(),
-          row.track ?? '',
-          row.artist ?? '',
-          row.ms_played === null ? '' : row.ms_played.toString(),
-        ].join('|')
-        if (!uniqueRows.has(key)) {
-          uniqueRows.set(key, row)
+      let rows: ListenInsert[]
+      try {
+        rows = parseSpotifyHistory(parsed)
+      } catch (error) {
+        if (error instanceof SpotifyHistoryParseError) {
+          resetState(error.message, 'error')
+          return
         }
-      }
 
-      const rows = Array.from(uniqueRows.values())
-
-      if (rows.length === 0) {
-        resetState('No valid listening records were found in the file.', 'error')
+        console.error(error)
+        resetState('An unexpected error occurred while processing the file.', 'error')
         return
       }
 
-      const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
-      if (!hasTimestamp) {
-        resetState('No timestamp information found in the uploaded file.', 'error')
-        return
-      }
-
-      setStatus({ state: 'uploading', message: 'Uploading data to Supabase…' })
+      setUploading('Uploading data to Supabase…')
 
       for (let index = 0; index < rows.length; index += BATCH_SIZE) {
         const batch = rows.slice(index, index + BATCH_SIZE)
@@ -360,10 +237,7 @@ export default function UploadPage() {
 
         if (error) {
           console.error(error)
-          resetState(
-            'Supabase returned an error while uploading. Please try again.',
-            'error',
-          )
+          resetState('Supabase returned an error while uploading. Please try again.', 'error')
           return
         }
 
@@ -374,12 +248,9 @@ export default function UploadPage() {
 
       setProgress(100)
       setSelectedFile(null)
-      setStatus({
-        state: 'success',
-        message: `Successfully uploaded ${rows.length} listening records.`,
-      })
+      setSuccess(`Successfully uploaded ${rows.length} listening records.`)
     },
-    [resetState, supabase],
+    [resetState, setSuccess, setUploading, setValidating, supabase],
   )
 
 
@@ -393,11 +264,7 @@ export default function UploadPage() {
       </div>
       <UploadDropzone
         onFileAccepted={handleFile}
-        isBusy={
-          status.state === 'validating' ||
-          status.state === 'uploading' ||
-          status.state === 'resetting'
-        }
+        isBusy={isBusy}
         selectedFile={selectedFile}
       />
       <div className="flex justify-center">
