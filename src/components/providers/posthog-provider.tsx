@@ -1,23 +1,23 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useEffect, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
-import { initPostHog, usePostHogPageview } from '@/lib/monitoring/posthog/client'
+import { initPostHog, usePostHogPageview } from "@/lib/monitoring/posthog/client";
 
 interface Props {
-  children: React.ReactNode
+  children: ReactNode;
 }
 
 export function PostHogProvider({ children }: Props) {
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    initPostHog()
-  }, [])
+    initPostHog();
+  }, []);
 
-  usePostHogPageview(pathname, searchParams)
+  usePostHogPageview(pathname, searchParams);
 
-  return <>{children}</>
+  return <>{children}</>;
 }

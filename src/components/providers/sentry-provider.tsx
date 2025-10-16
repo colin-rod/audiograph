@@ -1,24 +1,24 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from "react";
 
 import {
   registerClientExceptionHandlers,
   unregisterClientExceptionHandlers,
-} from '@/lib/monitoring/sentry/client'
+} from "@/lib/monitoring/sentry/client";
 
 interface Props {
-  children: React.ReactNode
+  children: ReactNode;
 }
 
 export function SentryProvider({ children }: Props) {
   useEffect(() => {
-    registerClientExceptionHandlers()
+    registerClientExceptionHandlers();
 
     return () => {
-      unregisterClientExceptionHandlers()
-    }
-  }, [])
+      unregisterClientExceptionHandlers();
+    };
+  }, []);
 
-  return <>{children}</>
+  return <>{children}</>;
 }
