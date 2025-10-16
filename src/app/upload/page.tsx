@@ -390,6 +390,34 @@ export default function UploadPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           Drag in the JSON exports downloaded from Spotify to add them to Supabase.
         </p>
+        <details className="mt-4 text-left text-sm text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">
+            Need help downloading your Spotify data?
+          </summary>
+          <ol className="mt-2 list-decimal space-y-2 pl-5">
+            <li>
+              Visit Spotify&apos;s{' '}
+              <a
+                className="underline"
+                href="https://www.spotify.com/account/privacy/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Privacy Settings
+              </a>{' '}
+              and sign in.
+            </li>
+            <li>Select <strong>Download your data</strong>, then choose the <strong>Extended streaming history</strong> option.</li>
+            <li>Submit the request and wait for Spotify&apos;s email confirming your archive is ready.</li>
+            <li>
+              Download the ZIP from Spotify&apos;s email, extract it, and drag the <code>StreamingHistory*.json</code>{' '}
+              files into this uploader.
+            </li>
+          </ol>
+          <p className="mt-2">
+            Spotify can take a few days to prepare the archive, so keep an eye on your inbox.
+          </p>
+        </details>
       </div>
       <UploadDropzone
         onFileAccepted={handleFile}
