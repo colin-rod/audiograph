@@ -66,3 +66,25 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## FAQ
+
+### How do I start the development server?
+
+Run `npm run dev` (or `yarn dev`, `pnpm dev`, `bun dev`) and open [http://localhost:3000](http://localhost:3000) in your browser. The app will hot reload as you edit files under `src/`.
+
+### Which scripts should I run before committing code?
+
+Run the project quality gates: `npm run lint`, `npm run typecheck`, and `npm run test`. This mirrors the GitHub Actions workflow and prevents avoidable CI failures.
+
+### Where should I place new tests?
+
+Colocate specs next to the code they cover inside `src/`. Name the files with the `.test.ts` or `.test.tsx` suffix so Vitest discovers them automatically.
+
+### How do I run the test suite with coverage?
+
+Execute `npm run test:coverage`. Coverage reports are generated in the `coverage/` directory in HTML, lcov, and text formats.
+
+### What branching strategy should I follow?
+
+Create feature branches instead of committing directly to `main`. Push the branch and open a pull request for review to comply with the repository protections.
