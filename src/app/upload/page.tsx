@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 
 export const dynamic = "force-dynamic"
@@ -226,7 +226,29 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Supabase configuration is missing.'
+      console.warn(message)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not configured. Please contact support.',
+      })
+    }
+  }, [supabase])
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
@@ -255,6 +277,14 @@ export default function UploadPage() {
     })
 
     try {
+      if (!supabase) {
+        setStatus({
+          state: 'error',
+          message: 'Supabase is not configured. Please contact support.',
+        })
+        return
+      }
+
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
 
       if (error) {
@@ -285,6 +315,11 @@ export default function UploadPage() {
       setSelectedFile(file)
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
+
+      if (!supabase) {
+        resetState('Supabase is not configured. Please contact support.', 'error')
+        return
+      }
 
       if (!file.name.toLowerCase().endsWith('.json')) {
         resetState('Only JSON files are supported.', 'error')

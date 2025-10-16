@@ -13,10 +13,12 @@ import {
   type FeedbackResponse,
 } from '@/lib/types/feedback'
 
+type FocusTargetRef = { current: HTMLElement | null } | null
+
 interface FeedbackModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  triggerRef?: React.RefObject<HTMLElement>
+  triggerRef?: FocusTargetRef
 }
 
 // Feedback type options with icons
@@ -26,6 +28,8 @@ const FEEDBACK_TYPE_OPTIONS = [
   { value: FeedbackType.UX_ISSUE, label: 'UX Issue', icon: Palette },
   { value: FeedbackType.OTHER, label: 'General Feedback', icon: MessageSquare },
 ] as const
+
+let hasWarnedMissingSupabaseEnv = false
 
 export function FeedbackModal({ open, onOpenChange, triggerRef }: FeedbackModalProps) {
   const [formData, setFormData] = useState<FeedbackFormData>({
@@ -56,10 +60,20 @@ export function FeedbackModal({ open, onOpenChange, triggerRef }: FeedbackModalP
     try {
       // For client-side, we need to use the browser client
       const { createBrowserClient } = await import('@supabase/ssr')
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        if (!hasWarnedMissingSupabaseEnv && process.env.NODE_ENV !== 'production') {
+          console.warn(
+            'Supabase environment variables are not configured; skipping authenticated feedback metadata.'
+          )
+          hasWarnedMissingSupabaseEnv = true
+        }
+        return undefined
+      }
+
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
       const {
         data: { user },
       } = await supabase.auth.getUser()

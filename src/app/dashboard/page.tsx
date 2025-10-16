@@ -18,7 +18,6 @@ import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
-import { createSupabaseClient } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 import { ShareCardsDialog } from "@/components/dashboard/share-cards"
 
@@ -325,14 +324,33 @@ export default function DashboardPage() {
     ALL_TIME_OPTION.value
   )
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
-
   useEffect(() => {
     let active = true
-    const supabase = createSupabaseBrowserClient()
+    let supabaseClient: ReturnType<typeof createSupabaseBrowserClient> | null = null
+
+    try {
+      supabaseClient = createSupabaseBrowserClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Supabase configuration is missing."
+      console.warn(message)
+      setErrorState("error")
+      setListens(null)
+      return () => {
+        active = false
+      }
+    }
 
     const fetchData = async () => {
-      const { data, error } = await supabase
+      if (!supabaseClient) {
+        return
+      }
+
+      const { data, error } = await supabaseClient
         .from("listens")
         .select("ms_played, artist, track, ts")
 
@@ -366,7 +384,7 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [supabase])
+  }, [])
 
   const timeframeOptions = useMemo<TimeframeOption[]>(() => {
     if (!listens || listens.length === 0) {
