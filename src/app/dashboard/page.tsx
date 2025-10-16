@@ -12,6 +12,7 @@ import {
   type DashboardStats,
 } from "@/components/dashboard/dashboard-summary"
 import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
+import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboard/listening-history"
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
@@ -665,6 +666,29 @@ export default function DashboardPage() {
               className="h-full"
             >
               <ListeningClockHeatmapSkeleton className="h-full" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+      <section aria-label="Searchable listening history">
+        <AnimatePresence mode="wait">
+          {filteredListens ? (
+            <motion.div
+              key={`listening-history-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <ListeningHistory listens={filteredListens} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`listening-history-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <ListeningHistorySkeleton />
             </motion.div>
           )}
         </AnimatePresence>

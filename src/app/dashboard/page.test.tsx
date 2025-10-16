@@ -283,6 +283,9 @@ describe("Dashboard page", () => {
     expect(
       screen.getByTestId("listening-clock-heatmap-skeleton")
     ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("listening-history-skeleton")
+    ).toBeInTheDocument()
 
     expect(resolveSelect).not.toBeNull()
 
@@ -371,6 +374,12 @@ describe("Dashboard page", () => {
     expect(
       screen.queryByTestId("listening-clock-heatmap-skeleton")
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("listening-history-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /search your listening history/i })
+    ).toBeInTheDocument()
 
     const expectCardValue = (label: string, value: string) => {
       const cardQueries = getCardQueries(summary, label)
@@ -392,7 +401,9 @@ describe("Dashboard page", () => {
     expect(screen.getAllByText("Artist B")[0]).toBeInTheDocument()
 
     expect(screen.getByRole("heading", { name: /top tracks/i })).toBeInTheDocument()
-    const tracksTable = screen.getByRole("table")
+    const tracksTable = screen.getByRole("table", {
+      name: /ordered by total listening hours/i,
+    })
     expect(within(tracksTable).getByText("Track 1")).toBeInTheDocument()
     expect(within(tracksTable).getByText("1.0 hrs")).toBeInTheDocument()
 
@@ -489,6 +500,80 @@ describe("Dashboard page", () => {
     })
     expect(within(tracksTable).getByText("Track Jan")).toBeInTheDocument()
     expect(within(tracksTable).queryByText("Track 2023")).not.toBeInTheDocument()
+  })
+
+  it("lets users search their listening history by song and time range", async () => {
+    selectMock.mockResolvedValueOnce({
+      data: [
+        {
+          ms_played: 2_400_000,
+          artist: "Artist Alpha",
+          track: "Track One",
+          ts: "2024-03-11T10:00:00.000Z",
+        },
+        {
+          ms_played: 1_200_000,
+          artist: "Artist Beta",
+          track: "Track Two",
+          ts: "2024-03-12T15:30:00.000Z",
+        },
+        {
+          ms_played: 3_000_000,
+          artist: "Artist Gamma",
+          track: "Track Three",
+          ts: "2024-03-13T21:15:00.000Z",
+        },
+      ],
+      error: null,
+    })
+
+    const user = userEvent.setup()
+
+    await renderDashboard()
+
+    await screen.findByRole("heading", { name: /search your listening history/i })
+
+    const searchInput = screen.getByLabelText(/search songs or artists/i)
+    const historyTable = screen.getByRole("table", {
+      name: /listening history results/i,
+    })
+    expect(searchInput).toHaveValue("")
+
+    await user.type(searchInput, "Artist Beta")
+
+    await waitFor(() => {
+      expect(within(historyTable).getByText("Track Two")).toBeInTheDocument()
+    })
+    expect(within(historyTable).queryByText("Track One")).not.toBeInTheDocument()
+    expect(screen.getByText(/Showing 1 play/i)).toBeInTheDocument()
+
+    await user.clear(searchInput)
+
+    await waitFor(() => {
+      expect(within(historyTable).getByText("Track One")).toBeInTheDocument()
+      expect(within(historyTable).getByText("Track Three")).toBeInTheDocument()
+    })
+
+    const fromInput = screen.getByLabelText(/^From$/i)
+    await user.type(fromInput, "2025-01-01T00:00")
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /No plays match your current filters. Try broadening your search or removing the time range./i
+        )
+      ).toBeInTheDocument()
+      expect(screen.getByText(/Showing 0 plays/i)).toBeInTheDocument()
+    })
+
+    const toInput = screen.getByLabelText(/^To$/i)
+    await user.type(toInput, "2024-01-01T00:00")
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/The start of your range must be before the end time./i)
+      ).toBeInTheDocument()
+    })
   })
 
   it("shows share cards control once insights load and triggers export", async () => {
