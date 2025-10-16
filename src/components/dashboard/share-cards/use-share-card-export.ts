@@ -31,9 +31,9 @@ type HtmlToImageModule = {
 }
 
 const resolveHtmlToImageModule = async () => {
-  const module = (await import("html-to-image")) as HtmlToImageModule
-  const toPngFn = module.toPng ?? module.default?.toPng
-  const toSvgFn = module.toSvg ?? module.default?.toSvg
+  const htmlToImageModule = (await import("html-to-image")) as HtmlToImageModule
+  const toPngFn = htmlToImageModule.toPng ?? htmlToImageModule.default?.toPng
+  const toSvgFn = htmlToImageModule.toSvg ?? htmlToImageModule.default?.toSvg
 
   if (!toPngFn || !toSvgFn) {
     throw new Error("html-to-image helpers are unavailable")
