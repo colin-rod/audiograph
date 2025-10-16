@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react"
 
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -11,20 +11,56 @@ type ListenRow = {
   ts: string | null
 }
 
-type SupabaseSelectResult = {
-  data: ListenRow[] | null
-  error: Error | null
+type SupabaseSelectError = {
+  message: string
+  status?: number
+  code?: string
+  details?: string
+  hint?: string
 }
 
-const { usePathnameMock, selectMock, fromMock } = vi.hoisted(() => {
+type SupabaseSelectResult = {
+  data: ListenRow[] | null
+  error: SupabaseSelectError | null
+}
+
+const {
+  usePathnameMock,
+  selectMock,
+  fromMock,
+  supabaseBrowserClient,
+  createSupabaseBrowserClientMock,
+  getSessionMock,
+  redirectMock,
+} = vi.hoisted(() => {
   const pathname = vi.fn<() => string>(() => "/dashboard")
   const select = vi.fn(async (): Promise<SupabaseSelectResult> => ({
     data: [],
     error: null,
   }))
   const from = vi.fn(() => ({ select }))
+  const supabaseClient = { from }
+  const createClient = vi.fn(() => supabaseClient)
+  const getSession = vi.fn(
+    async (): Promise<{
+      data: { session: { user: { id: string } } | null }
+      error: null
+    }> => ({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+  )
+  const redirect = vi.fn()
 
-  return { usePathnameMock: pathname, selectMock: select, fromMock: from }
+  return {
+    usePathnameMock: pathname,
+    selectMock: select,
+    fromMock: from,
+    supabaseBrowserClient: supabaseClient,
+    createSupabaseBrowserClientMock: createClient,
+    getSessionMock: getSession,
+    redirectMock: redirect,
+  }
 })
 
 type LinkProps = Omit<ComponentProps<"a">, "href"> & {
@@ -48,17 +84,35 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameMock(),
+  redirect: redirectMock,
 }))
 
 vi.mock("@/lib/supabaseClient", () => ({
-  supabase: {
-    from: fromMock,
-  },
+  supabase: supabaseBrowserClient,
+  createSupabaseBrowserClient: () => createSupabaseBrowserClientMock(),
+}))
+
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: () => ({
+    auth: {
+      getSession: () => getSessionMock(),
+    },
+  }),
 }))
 
 import DashboardLayout from "./layout"
 import DashboardPage from "./page"
 import { ThemeProvider } from "@/components/providers/theme-provider"
+
+const renderDashboard = async () => {
+  const layout = await DashboardLayout({
+    children: <DashboardPage />,
+  })
+
+  await act(async () => {
+    render(<ThemeProvider>{layout}</ThemeProvider>)
+  })
+}
 
 const getCardQueries = (summary: HTMLElement, label: string) => {
   const card = within(summary).getByText(label).closest("[data-slot='card']")
@@ -69,8 +123,26 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 describe("Dashboard page", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/dashboard")
-    selectMock.mockClear()
-    fromMock.mockClear()
+
+    selectMock.mockReset()
+    selectMock.mockImplementation(async () => ({
+      data: [],
+      error: null,
+    }))
+
+    fromMock.mockReset()
+    fromMock.mockImplementation(() => ({ select: selectMock }))
+
+    createSupabaseBrowserClientMock.mockReset()
+    createSupabaseBrowserClientMock.mockImplementation(() => supabaseBrowserClient)
+
+    getSessionMock.mockReset()
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    redirectMock.mockReset()
   })
 
   afterEach(() => {
@@ -78,15 +150,15 @@ describe("Dashboard page", () => {
   })
 
   it("renders the dashboard shell with navigation", async () => {
-    selectMock.mockResolvedValueOnce({ data: [], error: null })
-
-    render(
-      <ThemeProvider>
-        <DashboardLayout>
-          <DashboardPage />
-        </DashboardLayout>
-      </ThemeProvider>
+    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          resolveSelect = resolve
+        })
     )
+
+    await renderDashboard()
 
     expect(
       screen.getByRole("navigation", { name: /sidebar navigation/i })
@@ -115,6 +187,12 @@ describe("Dashboard page", () => {
       screen.getByTestId("listening-clock-heatmap-skeleton")
     ).toBeInTheDocument()
 
+    expect(resolveSelect).not.toBeNull()
+
+    await act(async () => {
+      resolveSelect?.({ data: [], error: null })
+    })
+
     await waitFor(() => {
       expect(screen.getByTestId("dashboard-summary")).toBeInTheDocument()
     })
@@ -122,56 +200,61 @@ describe("Dashboard page", () => {
     expect(
       screen.queryByTestId("dashboard-summary-skeleton")
     ).not.toBeInTheDocument()
+    expect(redirectMock).not.toHaveBeenCalled()
   })
 
   it("replaces the skeleton with stats once data resolves", async () => {
-    selectMock.mockResolvedValueOnce({
-      data: [
-        {
-          ms_played: 3_600_000,
-          artist: "Artist B",
-          track: "Track 1",
-          ts: "2024-01-15T12:00:00.000Z",
-        },
-        {
-          ms_played: 1_800_000,
-          artist: "Artist A",
-          track: "Track 2",
-          ts: "2024-01-20T22:00:00.000Z",
-        },
-        {
-          ms_played: 900_000,
-          artist: "Artist A",
-          track: "Track 2",
-          ts: "2024-01-21T22:00:00.000Z",
-        },
-        {
-          ms_played: 2_400_000,
-          artist: "Artist C",
-          track: "Track 3",
-          ts: "2023-12-25T18:00:00.000Z",
-        },
-        {
-          ms_played: null,
-          artist: null,
-          track: null,
-          ts: null,
-        },
-      ],
-      error: null,
-    })
-
-    render(
-      <ThemeProvider>
-        <DashboardLayout>
-          <DashboardPage />
-        </DashboardLayout>
-      </ThemeProvider>
+    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          resolveSelect = resolve
+        })
     )
+
+    await renderDashboard()
 
     expect(
       screen.getByTestId("dashboard-summary-skeleton")
     ).toBeInTheDocument()
+
+    await act(async () => {
+      resolveSelect?.({
+        data: [
+          {
+            ms_played: 3_600_000,
+            artist: "Artist B",
+            track: "Track 1",
+            ts: "2024-01-15T12:00:00.000Z",
+          },
+          {
+            ms_played: 1_800_000,
+            artist: "Artist A",
+            track: "Track 2",
+            ts: "2024-01-20T22:00:00.000Z",
+          },
+          {
+            ms_played: 900_000,
+            artist: "Artist A",
+            track: "Track 2",
+            ts: "2024-01-21T22:00:00.000Z",
+          },
+          {
+            ms_played: 2_400_000,
+            artist: "Artist C",
+            track: "Track 3",
+            ts: "2023-12-25T18:00:00.000Z",
+          },
+          {
+            ms_played: null,
+            artist: null,
+            track: null,
+            ts: null,
+          },
+        ],
+        error: null,
+      })
+    })
 
     const summary = await screen.findByTestId("dashboard-summary")
     expect(summary).toBeInTheDocument()
@@ -266,13 +349,7 @@ describe("Dashboard page", () => {
 
     const user = userEvent.setup()
 
-    render(
-      <ThemeProvider>
-        <DashboardLayout>
-          <DashboardPage />
-        </DashboardLayout>
-      </ThemeProvider>
-    )
+    await renderDashboard()
 
     const summary = await screen.findByTestId("dashboard-summary")
     const timeframeButton = screen.getByRole("button", {
@@ -312,5 +389,52 @@ describe("Dashboard page", () => {
     })
     expect(within(tracksTable).getByText("Track Jan")).toBeInTheDocument()
     expect(within(tracksTable).queryByText("Track 2023")).not.toBeInTheDocument()
+  })
+
+  it("shows an unauthorized message when Supabase returns a 401", async () => {
+    selectMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: "Unauthorized",
+        status: 401,
+      },
+    })
+
+    await renderDashboard()
+
+    expect(
+      await screen.findByText(/sign in to access your audiograph dashboard/i)
+    ).toBeInTheDocument()
+
+    expect(
+      screen.getByRole("link", { name: /go to sign-in/i })
+    ).toHaveAttribute("href", "/sign-in")
+
+    expect(
+      screen.queryByTestId("dashboard-summary-skeleton")
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe("Dashboard layout", () => {
+  beforeEach(() => {
+    getSessionMock.mockReset()
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+    redirectMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("redirects to the sign-in page when the session is missing", async () => {
+    getSessionMock.mockResolvedValueOnce({ data: { session: null }, error: null })
+
+    await DashboardLayout({ children: <div /> })
+
+    expect(redirectMock).toHaveBeenCalledWith("/sign-in")
   })
 })

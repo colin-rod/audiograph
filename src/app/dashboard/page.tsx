@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 
 import {
@@ -11,7 +12,8 @@ import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/componen
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
-import { supabase } from "@/lib/supabaseClient"
+import { Button } from "@/components/ui/button"
+import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 
 import {
   TimeframeFilter,
@@ -26,6 +28,48 @@ type ListenSummaryRow = {
   artist: string | null
   track: string | null
   ts: string | null
+}
+
+type DashboardErrorState = "unauthorized" | "error" | null
+
+type DashboardStateMessageProps = {
+  title: string
+  description: string
+  action?: {
+    href: string
+    label: string
+  }
+}
+
+const DashboardStateMessage = ({
+  title,
+  description,
+  action,
+}: DashboardStateMessageProps) => (
+  <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-10 text-center">
+    <div className="space-y-1">
+      <h2 className="text-2xl font-semibold">{title}</h2>
+      <p className="text-muted-foreground">{description}</p>
+    </div>
+    {action ? (
+      <Button asChild>
+        <Link href={action.href}>{action.label}</Link>
+      </Button>
+    ) : null}
+  </div>
+)
+
+const getPostgrestErrorStatus = (error: unknown): number | null => {
+  if (typeof error !== "object" || error === null) {
+    return null
+  }
+
+  if (!("status" in error)) {
+    return null
+  }
+
+  const { status } = error as { status?: unknown }
+  return typeof status === "number" ? status : null
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -269,24 +313,37 @@ const ALL_TIME_OPTION: TimeframeOption = {
 
 export default function DashboardPage() {
   const [listens, setListens] = useState<ListenSummaryRow[] | null>(null)
+  const [errorState, setErrorState] = useState<DashboardErrorState>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeValue>(
     ALL_TIME_OPTION.value
   )
 
   useEffect(() => {
     let active = true
+    const supabase = createSupabaseBrowserClient()
 
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("listens")
         .select("ms_played, artist, track, ts")
 
+      if (!active) return
+
       if (error) {
-        console.error(error)
+        const status = getPostgrestErrorStatus(error)
+
+        if (status === 401) {
+          setErrorState("unauthorized")
+        } else {
+          console.error(error)
+          setErrorState("error")
+        }
+
+        setListens(null)
         return
       }
 
-      if (!active) return
+      setErrorState(null)
 
       const fetchedListens = (data ?? [])
         .map(toListenSummaryRow)
@@ -401,22 +458,54 @@ export default function DashboardPage() {
     return calculateDashboardData(filteredListens)
   }, [filteredListens])
 
-  return (
-    <div className="flex flex-col gap-10">
-      <section className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Your listening summary</h1>
-          <p className="text-muted-foreground">
-            See how many hours you have tuned in, the artists you keep coming
-            back to, and the tracks that defined your listening sessions.
-          </p>
-        </div>
+  const headerSection = (
+    <section className="flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Your listening summary</h1>
+        <p className="text-muted-foreground">
+          See how many hours you have tuned in, the artists you keep coming
+          back to, and the tracks that defined your listening sessions.
+        </p>
+      </div>
+      {errorState ? null : (
         <TimeframeFilter
           options={timeframeOptions}
           value={selectedTimeframe}
           onValueChange={setSelectedTimeframe}
         />
-      </section>
+      )}
+    </section>
+  )
+
+  if (errorState === "unauthorized") {
+    return (
+      <div className="flex flex-col gap-10">
+        {headerSection}
+        <DashboardStateMessage
+          title="You're signed out"
+          description="Sign in to access your Audiograph dashboard."
+          action={{ href: "/sign-in", label: "Go to sign-in" }}
+        />
+      </div>
+    )
+  }
+
+  if (errorState === "error") {
+    return (
+      <div className="flex flex-col gap-10">
+        {headerSection}
+        <DashboardStateMessage
+          title="We couldn't load your dashboard"
+          description="Please try again in a moment."
+          action={{ href: "/dashboard", label: "Try again" }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+      {headerSection}
       {dashboardData ? (
         <DashboardSummary stats={dashboardData.summary} />
       ) : (

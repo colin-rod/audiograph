@@ -16,11 +16,16 @@ const { notMock, deleteMock, fromMock } = vi.hoisted(() => {
   }
 })
 
-vi.mock("@/lib/supabaseClient", () => ({
-  supabase: {
+vi.mock("@/lib/supabaseClient", () => {
+  const supabaseClient = {
     from: fromMock,
-  },
-}))
+  }
+
+  return {
+    supabase: supabaseClient,
+    createSupabaseBrowserClient: () => supabaseClient,
+  }
+})
 
 describe("UploadPage reset controls", () => {
   beforeEach(() => {
