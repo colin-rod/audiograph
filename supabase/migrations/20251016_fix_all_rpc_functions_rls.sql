@@ -21,7 +21,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -104,7 +105,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -154,7 +156,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -202,7 +205,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -248,7 +252,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -299,7 +304,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   total_count_val bigint;
@@ -360,7 +366,8 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid;
@@ -389,6 +396,14 @@ $$;
 -- ============================================================================
 -- Update comments for documentation
 -- ============================================================================
+
+GRANT EXECUTE ON FUNCTION get_dashboard_summary(timestamptz, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_top_artists(timestamptz, timestamptz, int, int) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_top_tracks(timestamptz, timestamptz, int, int) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_listening_trends(timestamptz, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_listening_clock(timestamptz, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_listening_history(text, timestamptz, timestamptz, int, int) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_available_timeframes() TO authenticated;
 
 COMMENT ON FUNCTION get_dashboard_summary IS
   'Get dashboard summary statistics with optional time window filtering (user-scoped with RLS)';
