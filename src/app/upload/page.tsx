@@ -24,6 +24,7 @@ type ListenInsert = {
   artist: string | null
   track: string | null
   ms_played: number | null
+  user_id: string
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -77,7 +78,7 @@ const toSpotifyHistoryEntry = (value: unknown): SpotifyHistoryEntry | null => {
   return entry
 }
 
-const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
+const toListenInsert = (entry: SpotifyHistoryEntry, userId: string): ListenInsert | null => {
   const timestamp = entry.endTime ?? entry.ts
   if (!timestamp) {
     return null
@@ -99,6 +100,7 @@ const toListenInsert = (entry: SpotifyHistoryEntry): ListenInsert | null => {
     artist,
     track,
     ms_played: msPlayed,
+    user_id: userId,
   }
 }
 
@@ -280,7 +282,20 @@ export default function UploadPage() {
     })
 
     try {
-      const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
+      // Get the current user ID
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        setStatus({
+          state: 'error',
+          message: 'You must be signed in to delete data.',
+        })
+        return
+      }
+
+      const { error } = await supabase
+        .from('listens')
+        .delete()
+        .eq('user_id', userData.user.id)
 
       if (error) {
         console.error(error)
@@ -317,6 +332,14 @@ export default function UploadPage() {
       setSelectedFile(file)
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
+
+      // Get the current user ID
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        resetState('You must be signed in to upload data.', 'error')
+        return
+      }
+      const userId = userData.user.id
 
       if (!file.name.toLowerCase().endsWith('.json')) {
         resetState('Only JSON files are supported.', 'error')
@@ -355,7 +378,7 @@ export default function UploadPage() {
       const parsedRows = parsed
         .map(toSpotifyHistoryEntry)
         .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
-        .map(toListenInsert)
+        .map((entry) => toListenInsert(entry, userId))
         .filter((row): row is ListenInsert => row !== null)
 
       const uniqueRows = new Map<string, ListenInsert>()
