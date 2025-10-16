@@ -21,10 +21,10 @@ export function LandingPage() {
               visualizations—no spreadsheets, scripts, or data wrangling required.
             </p>
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
-              <Button asChild size="lg" className="w-full sm:w-auto">
+              <Button asChild variant="primary" size="lg" className="w-full sm:w-auto">
                 <Link href="/upload">Upload your history</Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Button asChild variant="secondary" size="lg" className="w-full sm:w-auto">
                 <Link href="#privacy">Learn about privacy</Link>
               </Button>
             </div>
@@ -60,7 +60,7 @@ export function LandingPage() {
                 We parse, dedupe, and batch upload your listening history to your connected
                 Supabase project so dashboards stay up to date.
               </p>
-              <Button asChild>
+              <Button asChild variant="primary">
                 <Link href="/upload">Go to upload</Link>
               </Button>
             </CardContent>
