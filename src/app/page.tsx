@@ -21,12 +21,52 @@ export function LandingPage() {
               visualizations—no spreadsheets, scripts, or data wrangling required.
             </p>
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
-              <Button asChild size="lg" className="w-full sm:w-auto">
+              <Button asChild variant="primary" size="lg" className="w-full sm:w-auto">
                 <Link href="/upload">Upload your history</Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Button asChild variant="secondary" size="lg" className="w-full sm:w-auto">
                 <Link href="#privacy">Learn about privacy</Link>
               </Button>
+            </div>
+            <div className="mx-auto max-w-3xl space-y-4 text-left sm:text-center lg:mx-0 lg:text-left">
+              <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                How it works
+              </p>
+              <ol className="grid gap-3 text-sm sm:grid-cols-3">
+                <li className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 p-4 shadow-sm">
+                  <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    1
+                  </span>
+                  <div className="space-y-1">
+                    <p className="font-semibold">Upload your export</p>
+                    <p className="text-muted-foreground">
+                      Drop in the Spotify JSON bundle and confirm the Supabase project you want to keep in sync.
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 p-4 shadow-sm">
+                  <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    2
+                  </span>
+                  <div className="space-y-1">
+                    <p className="font-semibold">We map the data</p>
+                    <p className="text-muted-foreground">
+                      Audiograph parses, dedupes, and batches every listen directly into your tables—no manual cleanup.
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 p-4 shadow-sm">
+                  <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    3
+                  </span>
+                  <div className="space-y-1">
+                    <p className="font-semibold">Dashboards update instantly</p>
+                    <p className="text-muted-foreground">
+                      Open your prebuilt dashboard or craft new charts with refreshed metrics and shareable highlights.
+                    </p>
+                  </div>
+                </li>
+              </ol>
             </div>
           </div>
           <figure className="flex-1">
@@ -52,15 +92,16 @@ export function LandingPage() {
             <CardHeader>
               <CardTitle>Upload in seconds</CardTitle>
               <CardDescription>
-                Drop in your Spotify JSON export and Audiograph handles the rest.
+                Drop in your Spotify JSON export and kick off automated dashboard refreshes.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground">
                 We parse, dedupe, and batch upload your listening history to your connected
-                Supabase project so dashboards stay up to date.
+                Supabase project, then sync sample visualizations so you can explore trends right
+                away.
               </p>
-              <Button asChild>
+              <Button asChild variant="primary">
                 <Link href="/upload">Go to upload</Link>
               </Button>
             </CardContent>

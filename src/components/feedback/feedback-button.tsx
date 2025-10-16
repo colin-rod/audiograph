@@ -2,8 +2,10 @@
 
 import React, { useRef, useState } from 'react'
 import { MessageSquare } from 'lucide-react'
-import { FeedbackModal } from './feedback-modal'
+
+import { capturePostHogEvent } from '@/lib/monitoring/posthog/client'
 import { cn } from '@/lib/utils'
+import { FeedbackModal } from './feedback-modal'
 
 interface FeedbackButtonProps {
   className?: string
@@ -20,6 +22,7 @@ export function FeedbackButton({ className }: FeedbackButtonProps) {
 
   const handleClick = () => {
     setIsModalOpen(true)
+    capturePostHogEvent('feedback_modal_opened')
   }
 
   return (
