@@ -1,21 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AuthButtonGroup } from "@/components/auth/auth-button-group";
 import { AppProviders } from "@/components/providers/app-providers";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Audiograph — Turn Spotify history into visuals",
@@ -31,6 +20,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        <ThemeProvider>
+          <div className="antialiased min-h-screen bg-background text-foreground font-sans">
         <AppProviders>
           <div
             className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}

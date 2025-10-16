@@ -42,7 +42,6 @@ import {
 import { WeeklyCadenceChart, WeeklyCadenceChartSkeleton } from "@/components/dashboard/weekly-cadence-chart"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
-import { createSupabaseClient } from "@/lib/supabaseClient"
 import { useDashboardSectionTransition } from "@/components/dashboard/dashboard-motion"
 import { ShareCardsDialog } from "@/components/dashboard/share-cards"
 import { getDashboardData, getAvailableTimeframes } from "@/lib/analytics-service"
@@ -1119,8 +1118,33 @@ export default function DashboardPage() {
   // Fetch available timeframes on mount
   useEffect(() => {
     let active = true
-    const supabase = createSupabaseBrowserClient()
+    let supabaseClient: ReturnType<typeof createSupabaseBrowserClient> | null = null
 
+    try {
+      supabaseClient = createSupabaseBrowserClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Supabase configuration is missing."
+      console.warn(message)
+      setErrorState("error")
+      setListens(null)
+      return () => {
+        active = false
+      }
+    }
+
+    const fetchData = async () => {
+      if (!supabaseClient) {
+        return
+      }
+
+      const { data, error } = await supabaseClient
+        .from("listens")
+        .select("ms_played, artist, track, ts")
     const fetchTimeframes = async () => {
       const result = await getAvailableTimeframes(supabase)
 

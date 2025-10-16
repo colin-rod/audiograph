@@ -1,4 +1,5 @@
 'use client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
@@ -247,6 +248,29 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Supabase configuration is missing.'
+      console.warn(message)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not configured. Please contact support.',
+      })
+    }
+  }, [supabase])
   const supabase = useMemo(() => createSupabaseClient(), [])
   const router = useRouter()
   const hasRedirectedRef = useRef(false)
@@ -286,6 +310,10 @@ export default function UploadPage() {
     })
 
     try {
+      if (!supabase) {
+        setStatus({
+          state: 'error',
+          message: 'Supabase is not configured. Please contact support.',
       // Get the current user ID
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError || !userData.user) {
@@ -296,6 +324,7 @@ export default function UploadPage() {
         return
       }
 
+      const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
       const { error } = await supabase
         .from('listens')
         .delete()
@@ -338,6 +367,10 @@ export default function UploadPage() {
       setProgress(0)
       setStatus({ state: 'validating', message: 'Validating file…' })
 
+      if (!supabase) {
+        resetState('Supabase is not configured. Please contact support.', 'error')
+        return
+      }
       // Get the current user ID
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError || !userData.user) {
