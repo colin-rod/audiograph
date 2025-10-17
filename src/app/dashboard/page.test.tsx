@@ -182,6 +182,11 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
   return card ? within(card as HTMLElement) : null
 }
 
+const originalSupabaseEnv = {
+  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+}
+
 describe("Dashboard page", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/dashboard")
@@ -278,6 +283,12 @@ describe("Dashboard page", () => {
       screen.getByTestId("top-tracks-table-skeleton")
     ).toBeInTheDocument()
     expect(
+      screen.getByTestId("discovery-tracker-chart-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("loyalty-gauge-card-skeleton")
+    ).toBeInTheDocument()
+    expect(
       screen.getByTestId("listening-trends-chart-skeleton")
     ).toBeInTheDocument()
     expect(
@@ -369,6 +380,12 @@ describe("Dashboard page", () => {
       screen.queryByTestId("top-tracks-table-skeleton")
     ).not.toBeInTheDocument()
     expect(
+      screen.queryByTestId("discovery-tracker-chart-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("loyalty-gauge-card-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
       screen.queryByTestId("listening-trends-chart-skeleton")
     ).not.toBeInTheDocument()
     expect(
@@ -401,6 +418,12 @@ describe("Dashboard page", () => {
     expect(screen.getAllByText("Artist B")[0]).toBeInTheDocument()
 
     expect(screen.getByRole("heading", { name: /top tracks/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /discovery tracker/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /loyalty gauge/i })
+    ).toBeInTheDocument()
     const tracksTable = screen.getByRole("table", {
       name: /ordered by total listening hours/i,
     })
@@ -682,6 +705,10 @@ describe("Dashboard page", () => {
 
 describe("Dashboard layout", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://example.supabase.co"
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "test-anon-key"
     getSessionMock.mockReset()
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
@@ -692,6 +719,8 @@ describe("Dashboard layout", () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseEnv.url
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = originalSupabaseEnv.anonKey
   })
 
   it("redirects to the sign-in page when the session is missing", async () => {

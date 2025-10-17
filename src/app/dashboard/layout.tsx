@@ -37,6 +37,27 @@ const headerContent = (
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
+  const isSupabaseConfigured =
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+  if (!isSupabaseConfigured) {
+    return (
+      <DashboardShell
+        sidebar={sidebarContent}
+        header={headerContent}
+        headerActions={
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <AuthButtonGroup orientation="horizontal" />
+          </div>
+        }
+      >
+        {children}
+      </DashboardShell>
+    )
+  }
+
   const supabase = createSupabaseServerClient()
   const {
     data: { session },

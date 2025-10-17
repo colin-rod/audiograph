@@ -226,7 +226,18 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error(error)
+      return null
+    }
+  }, [])
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
@@ -253,6 +264,15 @@ export default function UploadPage() {
       state: 'resetting',
       message: 'Deleting existing listens from Supabase…',
     })
+
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message:
+          'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+      })
+      return
+    }
 
     try {
       const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
@@ -349,6 +369,14 @@ export default function UploadPage() {
       const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
       if (!hasTimestamp) {
         resetState('No timestamp information found in the uploaded file.', 'error')
+        return
+      }
+
+      if (!supabase) {
+        resetState(
+          'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+          'error',
+        )
         return
       }
 
