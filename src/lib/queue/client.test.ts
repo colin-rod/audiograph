@@ -94,7 +94,7 @@ describe('QueueClient', () => {
       start: vi.fn().mockRejectedValue(new Error('Connection failed')),
       stop: vi.fn()
     }
-    vi.mocked(PgBoss).mockImplementationOnce(() => mockPgBoss as any)
+    vi.mocked(PgBoss).mockImplementationOnce(() => mockPgBoss as unknown as PgBoss)
 
     QueueClient.resetInstance()
 
