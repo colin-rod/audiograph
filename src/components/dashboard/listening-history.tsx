@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -81,6 +81,9 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
 
   const fromDate = useMemo(() => parseDateTimeInput(fromValue), [fromValue])
   const toDate = useMemo(() => parseDateTimeInput(toValue), [toValue])
+
+  // Track previous filter values to know when to reset page
+  const prevFiltersRef = useRef({ timeframeFilter, query, fromDate, toDate })
   const isRangeInvalid = Boolean(
     fromDate && toDate && fromDate.getTime() > toDate.getTime()
   )
@@ -111,10 +114,28 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     }
   }, [])
 
-  // Fetch data when filters change
+  // Fetch data when filters or page changes
   useEffect(() => {
     let active = true
     const supabase = createSupabaseBrowserClient()
+
+    // Check if filters changed (not just page)
+    const filtersChanged =
+      prevFiltersRef.current.timeframeFilter !== timeframeFilter ||
+      prevFiltersRef.current.query !== query ||
+      prevFiltersRef.current.fromDate !== fromDate ||
+      prevFiltersRef.current.toDate !== toDate
+
+    // Determine which page to fetch
+    let pageToFetch = currentPage
+    if (filtersChanged && currentPage !== 0) {
+      // Filters changed and we're not on page 0, reset to page 0
+      pageToFetch = 0
+      setCurrentPage(0)
+    }
+
+    // Update ref for next render
+    prevFiltersRef.current = { timeframeFilter, query, fromDate, toDate }
 
     const fetchData = async () => {
       setIsLoading(true)
@@ -126,7 +147,7 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
         start_date: fromDate?.toISOString() ?? timeParams.start_date,
         end_date: toDate?.toISOString() ?? timeParams.end_date,
         limit_count: PAGE_SIZE,
-        offset_count: currentPage * PAGE_SIZE,
+        offset_count: pageToFetch * PAGE_SIZE,
       }
 
       console.log('[ListeningHistory] Fetching with params:', fetchParams)
@@ -162,12 +183,8 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     return () => {
       active = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid, isAuthReady])
-
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(0)
-  }, [timeframeFilter, query, fromDate, toDate])
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasNextPage = currentPage < totalPages - 1
