@@ -114,6 +114,33 @@ export type WeeklyListeningTrendDatum = {
   hours: number
 }
 
+export type DiscoveryTrackerDatum = {
+  month: string
+  label: string
+  newArtists: number
+  newTracks: number
+}
+
+export type LoyaltyTrendDatum = {
+  month: string
+  label: string
+  repeatListenShare: number
+  repeatListenCount: number
+  totalListenCount: number
+}
+
+export type TopRepeatTrackDatum = {
+  track: string
+  artist: string | null
+  playCount: number
+}
+
+export type LoyaltyGaugeData = {
+  threshold: number
+  monthly: LoyaltyTrendDatum[]
+  topRepeatTracks: TopRepeatTrackDatum[]
+}
+
 export type ListeningClockDatum = {
   day: number
   hour: number
