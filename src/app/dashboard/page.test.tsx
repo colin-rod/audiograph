@@ -51,6 +51,10 @@ const {
     data: { user: { id: "user-1", email: "user@example.com" } },
     error: null,
   }))
+  const getClientSession = vi.fn(async () => ({
+    data: { session: { user: { id: "user-1" } } },
+    error: null,
+  }))
   const unsubscribe = vi.fn()
   const onAuthStateChange = vi.fn(() => ({
     data: {
@@ -65,11 +69,15 @@ const {
     auth: {
       getUser,
       onAuthStateChange,
+      getSession: getClientSession,
     },
   }
   const createClient = vi.fn(() => supabaseClient)
   const createSupabaseClient = vi.fn(() => ({
     from,
+    auth: {
+      getSession: getClientSession,
+    },
   }))
   const push = vi.fn()
   const useRouter = vi.fn(() => ({
@@ -165,6 +173,7 @@ vi.mock("@/components/dashboard/share-cards/use-share-card-export", () => ({
 import DashboardLayout from "./layout"
 import DashboardPage from "./page"
 import { ThemeProvider } from "@/components/providers/theme-provider"
+import { __analyticsFallback } from "@/lib/analytics-service"
 
 const renderDashboard = async () => {
   const layout = await DashboardLayout({
@@ -176,6 +185,11 @@ const renderDashboard = async () => {
   })
 }
 
+const primeSelectWithData = (rows: ListenRow[]) => {
+  selectMock.mockImplementationOnce(async () => ({ data: rows, error: null }))
+  selectMock.mockImplementationOnce(async () => ({ data: rows, error: null }))
+}
+
 const getCardQueries = (summary: HTMLElement, label: string) => {
   const card = within(summary).getByText(label).closest("[data-slot='card']")
   expect(card).not.toBeNull()
@@ -184,6 +198,7 @@ const getCardQueries = (summary: HTMLElement, label: string) => {
 
 describe("Dashboard page", () => {
   beforeEach(() => {
+    __analyticsFallback.resetCaches()
     usePathnameMock.mockReturnValue("/dashboard")
     pushMock.mockReset()
     useRouterMock.mockReset()
@@ -247,11 +262,17 @@ describe("Dashboard page", () => {
   })
 
   it("renders the dashboard shell with navigation", async () => {
-    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    const pendingSelects: ((result: SupabaseSelectResult) => void)[] = []
     selectMock.mockImplementationOnce(
       () =>
         new Promise<SupabaseSelectResult>((resolve) => {
-          resolveSelect = resolve
+          pendingSelects.push(resolve)
+        })
+    )
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          pendingSelects.push(resolve)
         })
     )
 
@@ -281,16 +302,22 @@ describe("Dashboard page", () => {
       screen.getByTestId("listening-trends-chart-skeleton")
     ).toBeInTheDocument()
     expect(
+      screen.getByTestId("weekly-cadence-chart-skeleton")
+    ).toBeInTheDocument()
+    expect(
       screen.getByTestId("listening-clock-heatmap-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("listening-streak-card-skeleton")
     ).toBeInTheDocument()
     expect(
       screen.getByTestId("listening-history-skeleton")
     ).toBeInTheDocument()
 
-    expect(resolveSelect).not.toBeNull()
+    expect(pendingSelects.length).toBeGreaterThan(0)
 
     await act(async () => {
-      resolveSelect?.({ data: [], error: null })
+      pendingSelects.forEach((resolve) => resolve({ data: [], error: null }))
     })
 
     await waitFor(() => {
@@ -304,11 +331,17 @@ describe("Dashboard page", () => {
   })
 
   it("replaces the skeleton with stats once data resolves", async () => {
-    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    const pendingSelects: ((result: SupabaseSelectResult) => void)[] = []
     selectMock.mockImplementationOnce(
       () =>
         new Promise<SupabaseSelectResult>((resolve) => {
-          resolveSelect = resolve
+          pendingSelects.push(resolve)
+        })
+    )
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          pendingSelects.push(resolve)
         })
     )
 
@@ -319,41 +352,43 @@ describe("Dashboard page", () => {
     ).toBeInTheDocument()
 
     await act(async () => {
-      resolveSelect?.({
-        data: [
-          {
-            ms_played: 3_600_000,
-            artist: "Artist B",
-            track: "Track 1",
-            ts: "2024-01-15T12:00:00.000Z",
-          },
-          {
-            ms_played: 1_800_000,
-            artist: "Artist A",
-            track: "Track 2",
-            ts: "2024-01-20T22:00:00.000Z",
-          },
-          {
-            ms_played: 900_000,
-            artist: "Artist A",
-            track: "Track 2",
-            ts: "2024-01-21T22:00:00.000Z",
-          },
-          {
-            ms_played: 2_400_000,
-            artist: "Artist C",
-            track: "Track 3",
-            ts: "2023-12-25T18:00:00.000Z",
-          },
-          {
-            ms_played: null,
-            artist: null,
-            track: null,
-            ts: null,
-          },
-        ],
-        error: null,
-      })
+      pendingSelects.forEach((resolve) =>
+        resolve({
+          data: [
+            {
+              ms_played: 3_600_000,
+              artist: "Artist B",
+              track: "Track 1",
+              ts: "2024-01-15T12:00:00.000Z",
+            },
+            {
+              ms_played: 1_800_000,
+              artist: "Artist A",
+              track: "Track 2",
+              ts: "2024-01-20T22:00:00.000Z",
+            },
+            {
+              ms_played: 900_000,
+              artist: "Artist A",
+              track: "Track 2",
+              ts: "2024-01-21T22:00:00.000Z",
+            },
+            {
+              ms_played: 2_400_000,
+              artist: "Artist C",
+              track: "Track 3",
+              ts: "2023-12-25T18:00:00.000Z",
+            },
+            {
+              ms_played: null,
+              artist: null,
+              track: null,
+              ts: null,
+            },
+          ],
+          error: null,
+        })
+      )
     })
 
     const summary = await screen.findByTestId("dashboard-summary")
@@ -410,11 +445,20 @@ describe("Dashboard page", () => {
     expect(
       screen.getByRole("heading", { name: /listening trends/i })
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /weekly cadence/i })
+    ).toBeInTheDocument()
     expect(screen.getAllByText(/Jan\s*2024/)).not.toHaveLength(0)
     expect(screen.getAllByText(/Dec\s*2023/)).not.toHaveLength(0)
 
     expect(
       screen.getByRole("heading", { name: /listening clock/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /listening streaks/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /time-based insights/i })
     ).toBeInTheDocument()
     expect(
       screen.getByLabelText(/Monday at 12:00 — 1.0 hrs/i)
@@ -425,35 +469,32 @@ describe("Dashboard page", () => {
   })
 
   it("filters dashboard metrics when timeframe changes", async () => {
-    selectMock.mockResolvedValueOnce({
-      data: [
-        {
-          ms_played: 4_500_000,
-          artist: "Artist 2023",
-          track: "Track 2023",
-          ts: "2023-11-05T12:00:00.000Z",
-        },
-        {
-          ms_played: 2_400_000,
-          artist: "Artist Jan",
-          track: "Track Jan",
-          ts: "2024-01-10T09:00:00.000Z",
-        },
-        {
-          ms_played: 1_800_000,
-          artist: "Artist Jan",
-          track: "Track Jan",
-          ts: "2024-01-15T11:30:00.000Z",
-        },
-        {
-          ms_played: 1_200_000,
-          artist: "Artist Feb",
-          track: "Track Feb",
-          ts: "2024-02-02T20:00:00.000Z",
-        },
-      ],
-      error: null,
-    })
+    primeSelectWithData([
+      {
+        ms_played: 4_500_000,
+        artist: "Artist 2023",
+        track: "Track 2023",
+        ts: "2023-11-05T12:00:00.000Z",
+      },
+      {
+        ms_played: 2_400_000,
+        artist: "Artist Jan",
+        track: "Track Jan",
+        ts: "2024-01-10T09:00:00.000Z",
+      },
+      {
+        ms_played: 1_800_000,
+        artist: "Artist Jan",
+        track: "Track Jan",
+        ts: "2024-01-15T11:30:00.000Z",
+      },
+      {
+        ms_played: 1_200_000,
+        artist: "Artist Feb",
+        track: "Track Feb",
+        ts: "2024-02-02T20:00:00.000Z",
+      },
+    ])
 
     const user = userEvent.setup()
 
@@ -503,29 +544,26 @@ describe("Dashboard page", () => {
   })
 
   it("lets users search their listening history by song and time range", async () => {
-    selectMock.mockResolvedValueOnce({
-      data: [
-        {
-          ms_played: 2_400_000,
-          artist: "Artist Alpha",
-          track: "Track One",
-          ts: "2024-03-11T10:00:00.000Z",
-        },
-        {
-          ms_played: 1_200_000,
-          artist: "Artist Beta",
-          track: "Track Two",
-          ts: "2024-03-12T15:30:00.000Z",
-        },
-        {
-          ms_played: 3_000_000,
-          artist: "Artist Gamma",
-          track: "Track Three",
-          ts: "2024-03-13T21:15:00.000Z",
-        },
-      ],
-      error: null,
-    })
+    primeSelectWithData([
+      {
+        ms_played: 2_400_000,
+        artist: "Artist Alpha",
+        track: "Track One",
+        ts: "2024-03-11T10:00:00.000Z",
+      },
+      {
+        ms_played: 1_200_000,
+        artist: "Artist Beta",
+        track: "Track Two",
+        ts: "2024-03-12T15:30:00.000Z",
+      },
+      {
+        ms_played: 3_000_000,
+        artist: "Artist Gamma",
+        track: "Track Three",
+        ts: "2024-03-13T21:15:00.000Z",
+      },
+    ])
 
     const user = userEvent.setup()
 
@@ -545,7 +583,7 @@ describe("Dashboard page", () => {
       expect(within(historyTable).getByText("Track Two")).toBeInTheDocument()
     })
     expect(within(historyTable).queryByText("Track One")).not.toBeInTheDocument()
-    expect(screen.getByText(/Showing 1 play/i)).toBeInTheDocument()
+    expect(screen.getByText(/Showing 1 of 1 play/i)).toBeInTheDocument()
 
     await user.clear(searchInput)
 
@@ -563,7 +601,7 @@ describe("Dashboard page", () => {
           /No plays match your current filters. Try broadening your search or removing the time range./i
         )
       ).toBeInTheDocument()
-      expect(screen.getByText(/Showing 0 plays/i)).toBeInTheDocument()
+      expect(screen.getByText(/Showing 0 of 0 plays/i)).toBeInTheDocument()
     })
 
     const toInput = screen.getByLabelText(/^To$/i)
@@ -577,11 +615,17 @@ describe("Dashboard page", () => {
   })
 
   it("shows share cards control once insights load and triggers export", async () => {
-    let resolveSelect: ((result: SupabaseSelectResult) => void) | null = null
+    const pendingSelects: ((result: SupabaseSelectResult) => void)[] = []
     selectMock.mockImplementationOnce(
       () =>
         new Promise<SupabaseSelectResult>((resolve) => {
-          resolveSelect = resolve
+          pendingSelects.push(resolve)
+        })
+    )
+    selectMock.mockImplementationOnce(
+      () =>
+        new Promise<SupabaseSelectResult>((resolve) => {
+          pendingSelects.push(resolve)
         })
     )
 
@@ -593,35 +637,37 @@ describe("Dashboard page", () => {
     expect(initialShareButton).toBeDisabled()
 
     await act(async () => {
-      resolveSelect?.({
-        data: [
-          {
-            ms_played: 3_600_000,
-            artist: "Artist Alpha",
-            track: "Track One",
-            ts: "2024-01-10T12:00:00.000Z",
-          },
-          {
-            ms_played: 2_400_000,
-            artist: "Artist Beta",
-            track: "Track Two",
-            ts: "2024-01-12T18:00:00.000Z",
-          },
-          {
-            ms_played: 1_800_000,
-            artist: "Artist Alpha",
-            track: "Track Two",
-            ts: "2024-01-15T20:00:00.000Z",
-          },
-          {
-            ms_played: 900_000,
-            artist: "Artist Gamma",
-            track: "Track Three",
-            ts: "2024-01-20T09:00:00.000Z",
-          },
-        ],
-        error: null,
-      })
+      pendingSelects.forEach((resolve) =>
+        resolve({
+          data: [
+            {
+              ms_played: 3_600_000,
+              artist: "Artist Alpha",
+              track: "Track One",
+              ts: "2024-01-10T12:00:00.000Z",
+            },
+            {
+              ms_played: 2_400_000,
+              artist: "Artist Beta",
+              track: "Track Two",
+              ts: "2024-01-12T18:00:00.000Z",
+            },
+            {
+              ms_played: 1_800_000,
+              artist: "Artist Alpha",
+              track: "Track Two",
+              ts: "2024-01-15T20:00:00.000Z",
+            },
+            {
+              ms_played: 900_000,
+              artist: "Artist Gamma",
+              track: "Track Three",
+              ts: "2024-01-20T09:00:00.000Z",
+            },
+          ],
+          error: null,
+        })
+      )
     })
 
     const shareButton = await screen.findByRole("button", { name: /share cards/i })
