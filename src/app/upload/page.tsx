@@ -1,7 +1,8 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
+import { parseAndMapJson } from '@/lib/upload/spotify-mapper'
 
 export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
@@ -9,105 +10,19 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
-type SpotifyHistoryEntry = {
-  endTime?: string | null
-  ts?: string | null
-  master_metadata_album_artist_name?: string | null
-  artistName?: string | null
-  master_metadata_track_name?: string | null
-  trackName?: string | null
-  msPlayed?: number | null
-  ms_played?: number | null
-}
-
-type ListenInsert = {
-  ts: Date
-  artist: string | null
-  track: string | null
-  ms_played: number | null
-  user_id: string
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
-
-const toSpotifyHistoryEntry = (value: unknown): SpotifyHistoryEntry | null => {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const endTime =
-    typeof value['endTime'] === 'string' ? (value['endTime'] as string) : null
-  const ts =
-    typeof value['ts'] === 'string' ? (value['ts'] as string) : null
-  const albumArtist =
-    typeof value['master_metadata_album_artist_name'] === 'string'
-      ? (value['master_metadata_album_artist_name'] as string)
-      : null
-  const artistName =
-    typeof value['artistName'] === 'string'
-      ? (value['artistName'] as string)
-      : null
-  const trackName =
-    typeof value['master_metadata_track_name'] === 'string'
-      ? (value['master_metadata_track_name'] as string)
-      : null
-  const fallbackTrackName =
-    typeof value['trackName'] === 'string'
-      ? (value['trackName'] as string)
-      : null
-  const msPlayed =
-    typeof value['msPlayed'] === 'number'
-      ? (value['msPlayed'] as number)
-      : null
-  const msPlayedSnake =
-    typeof value['ms_played'] === 'number'
-      ? (value['ms_played'] as number)
-      : null
-
-  const entry: SpotifyHistoryEntry = {
-    endTime,
-    ts,
-    master_metadata_album_artist_name: albumArtist,
-    artistName,
-    master_metadata_track_name: trackName,
-    trackName: fallbackTrackName,
-    msPlayed,
-    ms_played: msPlayedSnake,
-  }
-
-  return entry
-}
-
-const toListenInsert = (entry: SpotifyHistoryEntry, userId: string): ListenInsert | null => {
-  const timestamp = entry.endTime ?? entry.ts
-  if (!timestamp) {
-    return null
-  }
-
-  const parsedDate = new Date(timestamp)
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null
-  }
-
-  const msPlayed = entry.msPlayed ?? entry.ms_played ?? null
-  const artist =
-    entry.master_metadata_album_artist_name ?? entry.artistName ?? null
-  const track =
-    entry.master_metadata_track_name ?? entry.trackName ?? null
-
-  return {
-    ts: parsedDate,
-    artist,
-    track,
-    ms_played: msPlayed,
-    user_id: userId,
-  }
-}
-
 type StatusState = {
-  state: 'idle' | 'validating' | 'uploading' | 'resetting' | 'success' | 'error'
+  state: 'idle' | 'validating' | 'uploading' | 'processing' | 'resetting' | 'success' | 'error'
   message: string
+}
+
+type UploadJobStatus = {
+  id: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  filename: string
+  totalFiles: number
+  processedFiles: number
+  totalRecords: number
+  errorMessage?: string | null
 }
 
 const BATCH_SIZE = 500
@@ -175,7 +90,7 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
         ref={inputRef}
         id="spotify-upload"
         type="file"
-        accept=".json,application/json"
+        accept=".json,.zip,application/json,application/zip"
         className="sr-only"
         onChange={(event) => handleFiles(event.target.files)}
         disabled={isBusy}
@@ -199,9 +114,9 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
             isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40'
           } ${isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary'}`}
         >
-          <p className="text-sm font-medium">Drag and drop your Spotify JSON export here</p>
+          <p className="text-sm font-medium">Drag and drop your Spotify data here</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            or click to choose a file from your computer
+            Supports JSON files or ZIP archives (recommended)
           </p>
           {selectedFile ? (
             <p className="mt-4 text-sm font-medium">
@@ -238,7 +153,7 @@ export default function UploadPage() {
     supabase
       ? {
           state: 'idle',
-          message: 'Select a Spotify listening history JSON file to begin.',
+          message: 'Select a Spotify listening history file or ZIP archive to begin.',
         }
       : {
           state: 'error',
@@ -248,15 +163,94 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [uploadJobId, setUploadJobId] = useState<string | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
       setProgress(0)
       setSelectedFile(null)
       setStatus({ state, message })
+      setUploadJobId(null)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
     },
     [],
   )
+
+  // Poll upload job status
+  const pollUploadStatus = useCallback(async (jobId: string) => {
+    try {
+      const response = await fetch(`/api/uploads/${jobId}/status`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch upload status')
+      }
+
+      const jobStatus: UploadJobStatus = await response.json()
+
+      // Calculate progress
+      const filesProgress = jobStatus.totalFiles > 0
+        ? Math.round((jobStatus.processedFiles / jobStatus.totalFiles) * 100)
+        : 0
+      setProgress(filesProgress)
+
+      // Update status message
+      if (jobStatus.status === 'processing') {
+        setStatus({
+          state: 'processing',
+          message: `Processing ${jobStatus.processedFiles}/${jobStatus.totalFiles} files... (${jobStatus.totalRecords} records inserted)`,
+        })
+      } else if (jobStatus.status === 'completed') {
+        setProgress(100)
+        setStatus({
+          state: 'success',
+          message: `Successfully processed ${jobStatus.totalFiles} files with ${jobStatus.totalRecords} listening records.`,
+        })
+        setSelectedFile(null)
+        setUploadJobId(null)
+
+        // Stop polling
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+
+        // Redirect to dashboard
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 1500)
+      } else if (jobStatus.status === 'failed') {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setStatus({
+          state: 'error',
+          message: jobStatus.errorMessage || 'Upload processing failed. Please try again.',
+        })
+      }
+    } catch (error) {
+      console.error('Error polling upload status:', error)
+    }
+  }, [router])
+
+  // Start polling when uploadJobId is set
+  useEffect(() => {
+    if (uploadJobId) {
+      pollUploadStatus(uploadJobId)
+      pollingIntervalRef.current = setInterval(() => {
+        pollUploadStatus(uploadJobId)
+      }, 2000) // Poll every 2 seconds
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [uploadJobId, pollUploadStatus])
 
   const handleResetRequest = useCallback(() => {
     if (!supabase) {
@@ -284,7 +278,6 @@ export default function UploadPage() {
     })
 
     try {
-      // Get the current user ID
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError || !userData.user) {
         setStatus({
@@ -322,37 +315,41 @@ export default function UploadPage() {
     }
   }, [supabase])
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (!supabase) {
-        setSelectedFile(null)
-        setProgress(0)
-        setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
-        return
+  const handleZipUpload = useCallback(async (file: File) => {
+    setStatus({ state: 'uploading', message: 'Uploading ZIP file...' })
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/uploads/zip', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to upload ZIP file')
       }
 
-      setSelectedFile(file)
-      setProgress(0)
+      const result = await response.json()
+      setUploadJobId(result.uploadJobId)
+      setStatus({
+        state: 'processing',
+        message: `Uploaded ${result.totalFiles} files. Processing...`,
+      })
+    } catch (error) {
+      console.error('ZIP upload error:', error)
+      resetState(
+        error instanceof Error ? error.message : 'Failed to upload ZIP file',
+        'error'
+      )
+    }
+  }, [resetState])
+
+  const handleJsonUpload = useCallback(
+    async (file: File, userId: string) => {
       setStatus({ state: 'validating', message: 'Validating file…' })
-
-      // Get the current user ID
-      const { data: userData, error: userError } = await supabase.auth.getUser()
-      if (userError || !userData.user) {
-        resetState('You must be signed in to upload data.', 'error')
-        return
-      }
-      const userId = userData.user.id
-
-      if (!file.name.toLowerCase().endsWith('.json')) {
-        resetState('Only JSON files are supported.', 'error')
-        return
-      }
-
-      const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
-      if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
-        resetState('The selected file is not recognized as JSON.', 'error')
-        return
-      }
 
       let text: string
       try {
@@ -363,49 +360,17 @@ export default function UploadPage() {
         return
       }
 
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(text)
-      } catch (error) {
-        console.error(error)
-        resetState('The file does not contain valid JSON.', 'error')
+      const parseResult = parseAndMapJson(text, userId)
+
+      if (!parseResult.success) {
+        resetState(parseResult.error, 'error')
         return
       }
 
-      if (!Array.isArray(parsed)) {
-        resetState('Expected an array of listening records in the JSON file.', 'error')
-        return
-      }
-
-      const parsedRows = parsed
-        .map(toSpotifyHistoryEntry)
-        .filter((entry): entry is SpotifyHistoryEntry => entry !== null)
-        .map((entry) => toListenInsert(entry, userId))
-        .filter((row): row is ListenInsert => row !== null)
-
-      const uniqueRows = new Map<string, ListenInsert>()
-      for (const row of parsedRows) {
-        const key = [
-          row.ts.toISOString(),
-          row.track ?? '',
-          row.artist ?? '',
-          row.ms_played === null ? '' : row.ms_played.toString(),
-        ].join('|')
-        if (!uniqueRows.has(key)) {
-          uniqueRows.set(key, row)
-        }
-      }
-
-      const rows = Array.from(uniqueRows.values())
+      const rows = parseResult.records
 
       if (rows.length === 0) {
         resetState('No valid listening records were found in the file.', 'error')
-        return
-      }
-
-      const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
-      if (!hasTimestamp) {
-        resetState('No timestamp information found in the uploaded file.', 'error')
         return
       }
 
@@ -413,7 +378,7 @@ export default function UploadPage() {
 
       for (let index = 0; index < rows.length; index += BATCH_SIZE) {
         const batch = rows.slice(index, index + BATCH_SIZE)
-        const { error } = await supabase.from('listens').insert(batch)
+        const { error } = await supabase!.from('listens').insert(batch)
 
         if (error) {
           console.error(error)
@@ -436,7 +401,6 @@ export default function UploadPage() {
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
 
-      // Redirect to dashboard after successful upload
       setTimeout(() => {
         router.push('/dashboard')
       }, 1500)
@@ -444,13 +408,48 @@ export default function UploadPage() {
     [resetState, supabase, router],
   )
 
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (!supabase) {
+        setSelectedFile(null)
+        setProgress(0)
+        setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+        return
+      }
+
+      setSelectedFile(file)
+      setProgress(0)
+
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        resetState('You must be signed in to upload data.', 'error')
+        return
+      }
+
+      const fileName = file.name.toLowerCase()
+
+      if (fileName.endsWith('.zip')) {
+        await handleZipUpload(file)
+      } else if (fileName.endsWith('.json')) {
+        const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
+        if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
+          resetState('The selected file is not recognized as JSON.', 'error')
+          return
+        }
+        await handleJsonUpload(file, userData.user.id)
+      } else {
+        resetState('Only JSON and ZIP files are supported.', 'error')
+      }
+    },
+    [resetState, supabase, handleZipUpload, handleJsonUpload],
+  )
 
   return (
     <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
       <div className="text-center">
         <h1 className="text-2xl font-semibold">Upload your Spotify Listening History</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Drag in the JSON exports downloaded from Spotify to add them to Supabase.
+          Upload JSON files individually or a ZIP archive with multiple files.
         </p>
         <details className="mt-4 text-left text-sm text-muted-foreground">
           <summary className="cursor-pointer font-medium text-foreground">
@@ -472,12 +471,11 @@ export default function UploadPage() {
             <li>Select <strong>Download your data</strong>, then choose the <strong>Extended streaming history</strong> option.</li>
             <li>Submit the request and wait for Spotify&apos;s email confirming your archive is ready.</li>
             <li>
-              Download the ZIP from Spotify&apos;s email, extract it, and drag the <code>StreamingHistory*.json</code>{' '}
-              files into this uploader.
+              Download the ZIP from Spotify&apos;s email and upload it directly here, or extract it and upload individual <code>StreamingHistory*.json</code> files.
             </li>
           </ol>
           <p className="mt-2">
-            Spotify can take a few days to prepare the archive, so keep an eye on your inbox.
+            <strong>💡 Tip:</strong> Uploading the entire ZIP archive is faster and more convenient!
           </p>
         </details>
       </div>
@@ -487,6 +485,7 @@ export default function UploadPage() {
           !supabase ||
           status.state === 'validating' ||
           status.state === 'uploading' ||
+          status.state === 'processing' ||
           status.state === 'resetting'
         }
         selectedFile={selectedFile}
@@ -500,6 +499,7 @@ export default function UploadPage() {
             !supabase ||
             status.state === 'validating' ||
             status.state === 'uploading' ||
+            status.state === 'processing' ||
             status.state === 'resetting'
           }
           aria-label="Reset uploaded data"
@@ -517,7 +517,7 @@ export default function UploadPage() {
         cancelLabel="Cancel"
       />
       <div className="space-y-2">
-        {(status.state === 'uploading' || progress > 0) && (
+        {(status.state === 'uploading' || status.state === 'processing' || progress > 0) && (
           <Progress value={progress} aria-live="polite" />
         )}
         <p
