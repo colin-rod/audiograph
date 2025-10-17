@@ -54,9 +54,7 @@ describe('QueueClient', () => {
     const instance = await QueueClient.getInstance()
 
     expect(PgBoss).toHaveBeenCalledWith(
-      expect.objectContaining({
-        connectionString: 'postgresql://test:test@localhost:5432/testdb'
-      })
+      'postgresql://test:test@localhost:5432/testdb'
     )
 
     expect(instance.start).toHaveBeenCalledTimes(1)
