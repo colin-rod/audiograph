@@ -31,7 +31,8 @@ export function parseSentryDsn(dsn: string): SentryDsnComponents | null {
 
 export function createSentryStoreUrl(components: SentryDsnComponents): string {
   const portSegment = components.port ? `:${components.port}` : ""
-  return `${components.protocol}//${components.host}${portSegment}/api/${components.projectId}/store/`
+  // Use envelope endpoint instead of deprecated store endpoint for CORS support
+  return `${components.protocol}//${components.host}${portSegment}/api/${components.projectId}/envelope/`
 }
 
 export function createSentryAuthHeader(

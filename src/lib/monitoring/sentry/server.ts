@@ -109,15 +109,34 @@ async function sendEvent(payload: SentryEvent) {
   const endpoint = createSentryStoreUrl(dsn)
   const authHeader = createSentryAuthHeader(dsn, 'audiograph-server/1.0')
 
+  // Sentry Envelope format: header line + event line
+  const envelopeHeader = JSON.stringify({
+    event_id: payload.event_id,
+    sent_at: new Date().toISOString(),
+  })
+  const itemHeader = JSON.stringify({
+    type: 'event',
+    content_type: 'application/json',
+  })
+  const eventBody = JSON.stringify(payload)
+
+  // Format: {envelope_header}\n{item_header}\n{item_payload}
+  const envelope = `${envelopeHeader}\n${itemHeader}\n${eventBody}`
+
   try {
-    await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-sentry-envelope',
         'X-Sentry-Auth': authHeader,
       },
-      body: JSON.stringify(payload),
+      body: envelope,
     })
+
+    if (!response.ok) {
+      const responseText = await response.text()
+      console.error('Failed to send Sentry event. Status:', response.status, 'Response:', responseText)
+    }
   } catch (transportError) {
     console.error('Failed to send Sentry event', transportError)
   }

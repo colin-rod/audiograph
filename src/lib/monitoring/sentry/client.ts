@@ -115,24 +115,52 @@ function normaliseError(error: unknown): Error {
 async function sendEvent(payload: SentryEvent) {
   const dsn = getDsn()
   if (!dsn) {
+    console.warn('Sentry DSN not configured')
     return
   }
 
   const endpoint = createSentryStoreUrl(dsn)
   const authHeader = createSentryAuthHeader(dsn, 'audiograph-client/1.0')
 
+  console.log('[Sentry Debug] Sending event to:', endpoint)
+  console.log('[Sentry Debug] Payload:', payload)
+
+  // Sentry Envelope format: header line + event line
+  const envelopeHeader = JSON.stringify({
+    event_id: payload.event_id,
+    sent_at: new Date().toISOString(),
+  })
+  const itemHeader = JSON.stringify({
+    type: 'event',
+    content_type: 'application/json',
+  })
+  const eventBody = JSON.stringify(payload)
+
+  // Format: {envelope_header}\n{item_header}\n{item_payload}
+  const envelope = `${envelopeHeader}\n${itemHeader}\n${eventBody}`
+
   try {
-    await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-sentry-envelope',
         'X-Sentry-Auth': authHeader,
       },
-      body: JSON.stringify(payload),
+      body: envelope,
       keepalive: true,
     })
+
+    console.log('[Sentry Debug] Response status:', response.status)
+
+    if (!response.ok) {
+      const responseText = await response.text()
+      console.error('[Sentry Debug] Response error:', responseText)
+    } else {
+      console.log('[Sentry Debug] Event sent successfully')
+    }
   } catch (transportError) {
     console.error('Failed to send Sentry client event', transportError)
+    console.error('[Sentry Debug] Endpoint was:', endpoint)
   }
 }
 
