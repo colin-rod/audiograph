@@ -62,6 +62,11 @@ The project ships with a Vitest + Testing Library setup tuned for the App Router
 4. Refactor with confidence, keeping the watch run green.
 5. Finish with `npm run lint`, `npm run typecheck`, and `npm run test` (plus `npm run test:coverage` when you want detailed metrics) before raising a PR.
 
+## Time-Based Insights
+
+- **Weekly cadence chart** – Aggregate `ms_played` by week number to surface seasonal or holiday listening spikes, complementing the existing monthly view.
+- **Listening streaks** – Compute the longest run of consecutive days with any playback to create a "streak" card or calendar visualization.
+
 ## Monitoring & Analytics
 
 A lightweight telemetry layer ships with the app to help surface production errors and usage patterns. Both integrations stay dormant unless the required environment variables are present.

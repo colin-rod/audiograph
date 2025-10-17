@@ -172,6 +172,13 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     return listens
   }, [listens, isRangeInvalid])
 
+  const hasActiveFilters = Boolean(
+    query.trim() ||
+      fromValue ||
+      toValue ||
+      timeframeFilter.type !== "all"
+  )
+
   return (
     <Card className={cn("shadow-none", className)}>
       <CardHeader>
@@ -302,7 +309,7 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
               ) : (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    {listens.length
+                    {hasActiveFilters
                       ? "No plays match your current filters. Try broadening your search or removing the time range."
                       : "Once you import your listens, we'll display them here for quick searching."}
                   </TableCell>

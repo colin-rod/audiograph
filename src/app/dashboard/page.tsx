@@ -12,9 +12,11 @@ import {
 } from "@/components/dashboard/dashboard-summary"
 import { ListeningClockHeatmap, ListeningClockHeatmapSkeleton } from "@/components/dashboard/listening-clock-heatmap"
 import { ListeningHistory, ListeningHistorySkeleton } from "@/components/dashboard/listening-history"
+import { ListeningStreakCard, ListeningStreakCardSkeleton } from "@/components/dashboard/listening-streak-card"
 import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components/dashboard/listening-trends-chart"
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
+import { WeeklyCadenceChart, WeeklyCadenceChartSkeleton } from "@/components/dashboard/weekly-cadence-chart"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
@@ -361,73 +363,146 @@ export default function DashboardPage() {
           )}
         </AnimatePresence>
       </section>
-      <section
-        aria-label="Listening trends and clock"
-        className="grid gap-6 lg:grid-cols-2"
-      >
-        <AnimatePresence mode="wait">
-          {dashboardData ? (
-            <motion.div
-              key={`listening-trends-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <ListeningTrendsChart
-                data={dashboardData.listeningTrends}
+      <section aria-label="Time-based insights" className="space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Time-based insights
+          </h2>
+          <p className="text-muted-foreground">
+            Compare your monthly momentum with weekly spikes and uncover your
+            most consistent listening streaks.
+          </p>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`listening-trends-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
                 className="h-full"
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`listening-trends-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <ListeningTrendsChartSkeleton className="h-full" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <AnimatePresence mode="wait">
-          {dashboardData ? (
-            <motion.div
-              key={`listening-clock-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <ListeningClockHeatmap
-                data={dashboardData.listeningClock}
+              >
+                <ListeningTrendsChart
+                  data={dashboardData.listeningTrends}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`listening-trends-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
                 className="h-full"
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`listening-clock-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <ListeningClockHeatmapSkeleton className="h-full" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+              >
+                <ListeningTrendsChartSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`weekly-cadence-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <WeeklyCadenceChart
+                  data={dashboardData.weeklyListeningTrends}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`weekly-cadence-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <WeeklyCadenceChartSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`listening-clock-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <ListeningClockHeatmap
+                  data={dashboardData.listeningClock}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`listening-clock-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <ListeningClockHeatmapSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`listening-streak-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <ListeningStreakCard
+                  data={dashboardData.listeningStreak}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`listening-streak-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <ListeningStreakCardSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </section>
       <section aria-label="Searchable listening history">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={`listening-history-${activeTimeframeKey}`}
-            initial={sectionMotion.initial}
-            animate={sectionMotion.animate}
-            exit={sectionMotion.exit}
-          >
-            <ListeningHistory timeframeFilter={timeframeFilter} />
-          </motion.div>
+          {dashboardData ? (
+            <motion.div
+              key={`listening-history-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <ListeningHistory timeframeFilter={timeframeFilter} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`listening-history-skeleton-${activeTimeframeKey}`}
+              initial={sectionMotion.initial}
+              animate={sectionMotion.animate}
+              exit={sectionMotion.exit}
+            >
+              <ListeningHistorySkeleton />
+            </motion.div>
+          )}
         </AnimatePresence>
       </section>
       <ShareCardsDialog
