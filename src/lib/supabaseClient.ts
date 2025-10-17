@@ -1,5 +1,34 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
+type SupabaseConfig = {
+  supabaseUrl: string
+  supabaseAnonKey: string
+}
+
+const readSupabaseConfig = (): SupabaseConfig | null => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null
+import {
+  ensureSupabaseConfig,
+  getMissingSupabaseConfigMessage,
+  getSupabaseConfig,
+} from "./supabase/config"
+
+let hasLoggedMissingConfigWarning = false
+
+const getConfigOrLogWarning = () => {
+  const config = getSupabaseConfig()
+
+  if (!config) {
+    if (!hasLoggedMissingConfigWarning && process.env.NODE_ENV !== "production") {
+      console.warn(getMissingSupabaseConfigMessage())
+      hasLoggedMissingConfigWarning = true
+    }
+
+    return null
 /**
  * Validates and retrieves Supabase configuration from environment variables
  * Provides helpful error messages for missing configuration
@@ -49,33 +78,58 @@ const getSupabaseConfig = () => {
     )
   }
 
-  return { supabaseUrl, supabaseAnonKey }
+  return config
 }
 
-export const createSupabaseClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig()
+export const isSupabaseConfigured = () => readSupabaseConfig() !== null
+
+const createClient = () => {
+  const config = readSupabaseConfig()
+
+  if (!config) {
+    throw new Error("Supabase environment variables are not configured.")
+  }
+
   return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
+    supabaseUrl: config.supabaseUrl,
+    supabaseKey: config.supabaseAnonKey,
+export const createSupabaseClient = () => {
+  const { url, anonKey } = ensureSupabaseConfig()
+  return createClientComponentClient({
+    supabaseUrl: url,
+    supabaseKey: anonKey,
   })
 }
 
 export const createSupabaseBrowserClient = () => {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig()
+  const config = getConfigOrLogWarning()
+
+  if (!config) {
+    throw new Error(getMissingSupabaseConfigMessage())
+  }
+
+  const { url, anonKey } = config
+
   return createClientComponentClient({
-    supabaseUrl,
-    supabaseKey: supabaseAnonKey,
+    supabaseUrl: url,
+    supabaseKey: anonKey,
   })
 }
 
-let supabaseInstance: ReturnType<typeof createClientComponentClient> | null = null
+export const createSupabaseClient = () => createClient()
+
+export const createSupabaseBrowserClient = () => createClient()
 
 export const supabase = new Proxy({} as ReturnType<typeof createClientComponentClient>, {
-  get(target, prop) {
+  get(_target, prop) {
     if (!supabaseInstance) {
-      supabaseInstance = createSupabaseBrowserClient()
+      const { url, anonKey } = ensureSupabaseConfig()
+      supabaseInstance = createClientComponentClient({
+        supabaseUrl: url,
+        supabaseKey: anonKey,
+      })
     }
+
     return supabaseInstance[prop as keyof typeof supabaseInstance]
   },
 })
-

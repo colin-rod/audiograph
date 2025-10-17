@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, Suspense, useMemo, useState } from "react"
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabaseClient"
+import { createSupabaseClient } from "@/lib/supabaseClient"
 
 const buildCallbackMessage = (message: string | null, error: string | null) => {
   if (error) {
@@ -62,6 +62,26 @@ const SignInContent = () => {
   const [statusIntent, setStatusIntent] = useState<"success" | "error" | "info" | null>(
     initialMessage?.intent ?? null
   )
+  const supabase = useMemo<ReturnType<typeof createSupabaseClient> | null>(() => {
+    if (typeof window === "undefined") {
+      return null
+    }
+
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      console.error("Failed to initialize the Supabase client.", error)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus("error")
+      setStatusIntent("error")
+      setStatusMessage("Supabase is not available in this environment.")
+    }
+  }, [supabase])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -77,6 +97,13 @@ const SignInContent = () => {
     setStatus("loading")
     setStatusIntent(null)
     setStatusMessage(null)
+
+    if (!supabase) {
+      setStatus("error")
+      setStatusIntent("error")
+      setStatusMessage("Supabase is not available in this environment.")
+      return
+    }
 
     try {
       const redirectUrl = `${window.location.origin}/auth/callback`

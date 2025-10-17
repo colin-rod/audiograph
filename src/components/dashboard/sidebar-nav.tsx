@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva } from "class-variance-authority"
+import type { LucideIcon } from "lucide-react"
+import { LayoutDashboard, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -10,16 +12,17 @@ type SidebarNavItem = {
   title: string
   href: string
   description?: string
+  icon?: LucideIcon
 }
 
 const sidebarLinkVariants = cva(
-  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+  "group relative flex items-center gap-4 rounded-full px-5 py-3 text-base font-semibold tracking-tight transition-colors [&>svg]:size-5 [&>svg]:shrink-0",
   {
     variants: {
       active: {
-        true: "bg-[var(--sidebar-accent)] text-[var(--sidebar-accent-foreground)]",
+        true: "text-[var(--sidebar-accent-foreground)] shadow-[0_0_0_1px_var(--sidebar-border)] bg-[color:var(--sidebar-accent)]",
         false:
-          "text-[var(--sidebar-foreground)]/80 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+          "text-[var(--sidebar-foreground)]/75 hover:text-[var(--sidebar-foreground)] hover:bg-[color:var(--sidebar-accent-hover)]",
       },
     },
   }
@@ -29,6 +32,12 @@ const sidebarNavItems: SidebarNavItem[] = [
   {
     title: "Overview",
     href: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "Insights",
+    href: "/dashboard/insights",
+    icon: Sparkles,
   },
 ]
 
@@ -46,9 +55,14 @@ function SidebarNav({ items = sidebarNavItems }: { items?: SidebarNavItem[] }) {
             key={item.href}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
-            className={cn(sidebarLinkVariants({ active: isActive }))}
+            data-active={isActive ? "true" : "false"}
+            className={cn(
+              "before:absolute before:left-2 before:h-6 before:w-1 before:rounded-full before:bg-transparent before:transition-colors data-[active=true]:before:bg-[var(--sidebar-primary)]",
+              sidebarLinkVariants({ active: isActive })
+            )}
           >
-            <span>{item.title}</span>
+            {item.icon ? <item.icon aria-hidden className="transition-transform group-hover:scale-105" /> : null}
+            <span className="truncate">{item.title}</span>
             {item.description ? (
               <span className="text-xs font-normal text-[var(--sidebar-foreground)]/60">
                 {item.description}

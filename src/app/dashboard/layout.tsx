@@ -37,7 +37,55 @@ const headerContent = (
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase environment variables are not configured.")
+    return (
+      <DashboardShell
+        sidebar={sidebarContent}
+        header={headerContent}
+        headerActions={
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+          </div>
+        }
+      >
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <h2 className="text-xl font-semibold">Supabase is not configured</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable the dashboard.
+          </p>
+        </div>
+      </DashboardShell>
+    )
+  }
+
   const supabase = createSupabaseServerClient()
+  if (!supabase) {
+    return (
+      <DashboardShell
+        sidebar={sidebarContent}
+        header={headerContent}
+        headerActions={
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <AuthButtonGroup orientation="horizontal" />
+          </div>
+        }
+      >
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          Supabase environment variables are not configured. Set{' '}
+          <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code>{' '}
+          and{' '}
+          <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{' '}
+          to enable the dashboard.
+        </div>
+        {children}
+      </DashboardShell>
+    )
+  }
   const {
     data: { session },
   } = await supabase.auth.getSession()
