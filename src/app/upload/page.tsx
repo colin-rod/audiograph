@@ -1,12 +1,25 @@
 'use client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import Link from 'next/link'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
+import {
+  parseSpotifyHistory,
+  SpotifyHistoryParseError,
+  type ListenInsert,
+} from '@/lib/spotifyHistory'
+import { useUploadStatus } from '@/lib/useUploadStatus'
+import { cn } from '@/lib/utils'
 
-export const dynamic = "force-dynamic"
+import { createSupabaseClient } from '@/lib/supabaseClient'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+
+export const dynamic = "force-dynamic"
 
 type SpotifyHistoryEntry = {
   endTime?: string | null
@@ -194,9 +207,11 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-            isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40'
-          } ${isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary'}`}
+          className={cn(
+            'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+            isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40',
+            isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary',
+          )}
         >
           <p className="text-sm font-medium">Drag and drop your Spotify JSON export here</p>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -223,6 +238,19 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
+  const AUTH_CHECK_MESSAGE = 'Checking your authentication status…'
+  const SIGN_IN_MESSAGE = 'Sign in to upload your Spotify listening history.'
+  const READY_MESSAGE = 'Select a Spotify listening history JSON file to begin.'
+
+  const [status, setStatus] = useState<StatusState>({
+    state: 'idle',
+    message: AUTH_CHECK_MESSAGE,
+  })
+  const [progress, setProgress] = useState(0)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
+  const [isAuthLoading, setIsAuthLoading] = useState(true)
   const supabase = useMemo(() => {
     try {
       return createSupabaseClient()
@@ -246,17 +274,141 @@ export default function UploadPage() {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const supabase = useMemo(() => {
+    try {
+      return createSupabaseClient()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Supabase configuration is missing.'
+      console.warn(message)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus({
+        state: 'error',
+        message: 'Supabase is not configured. Please contact support.',
+      })
+    }
+  }, [supabase])
+  const supabase = useMemo(() => createSupabaseClient(), [])
+  const {
+    status,
+    setError,
+    setResetting,
+    setSuccess,
+    setUploading,
+    setValidating,
+    isBusy,
+  } = useUploadStatus('Select a Spotify listening history JSON file to begin.')
+
+  const resetToError = useCallback(
+    (message: string) => {
+  const router = useRouter()
+  const hasRedirectedRef = useRef(false)
 
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
       setProgress(0)
       setSelectedFile(null)
-      setStatus({ state, message })
+      setError(message)
     },
-    [],
+    [setError],
   )
 
+  useEffect(() => {
+    let isMounted = true
+    setIsAuthLoading(true)
+
+    const loadSession = async () => {
+      const {
+        data: { session: initialSession },
+      } = await supabase.auth.getSession()
+
+      if (!isMounted) {
+        return
+      }
+
+      setSession(initialSession)
+      setIsAuthLoading(false)
+    }
+
+    void loadSession()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!isMounted) {
+        return
+      }
+
+      setSession(nextSession)
+      setIsAuthLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    if (isAuthLoading) {
+      setStatus((previous) => {
+        if (previous.state === 'idle' && previous.message === AUTH_CHECK_MESSAGE) {
+          return previous
+        }
+
+        if (previous.state === 'idle') {
+          return { state: 'idle', message: AUTH_CHECK_MESSAGE }
+        }
+
+        return previous
+      })
+      return
+    }
+
+    if (!session) {
+      setStatus((previous) => {
+        if (previous.state === 'idle' && previous.message === SIGN_IN_MESSAGE) {
+          return previous
+        }
+
+        return { state: 'idle', message: SIGN_IN_MESSAGE }
+      })
+      return
+    }
+
+    setStatus((previous) => {
+      if (previous.state === 'idle' && previous.message !== READY_MESSAGE) {
+        return { state: 'idle', message: READY_MESSAGE }
+      }
+
+      if (previous.state === 'error' && previous.message === SIGN_IN_MESSAGE) {
+        return { state: 'idle', message: READY_MESSAGE }
+      }
+
+      return previous
+    })
+  }, [AUTH_CHECK_MESSAGE, READY_MESSAGE, SIGN_IN_MESSAGE, isAuthLoading, session])
+
   const handleResetRequest = useCallback(() => {
+    if (!session) {
+      setStatus({
+        state: 'error',
+        message: 'You must be signed in to reset uploaded data.',
+      })
+      return
+    }
+
+    setIsResetDialogOpen(true)
+  }, [session])
     if (!supabase) {
       setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
       return
@@ -270,18 +422,28 @@ export default function UploadPage() {
 
   const handleConfirmReset = useCallback(async () => {
     setIsResetDialogOpen(false)
+
+    if (!session) {
+      setStatus({
+        state: 'error',
+        message: 'You must be signed in to reset uploaded data.',
+      })
+      return
+    }
+
     if (!supabase) {
       setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
       return
     }
     setProgress(0)
     setSelectedFile(null)
-    setStatus({
-      state: 'resetting',
-      message: 'Deleting existing listens from Supabase…',
-    })
+    setResetting('Deleting existing listens from Supabase…')
 
     try {
+      if (!supabase) {
+        setStatus({
+          state: 'error',
+          message: 'Supabase is not configured. Please contact support.',
       // Get the current user ID
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError || !userData.user) {
@@ -292,6 +454,7 @@ export default function UploadPage() {
         return
       }
 
+      const { error } = await supabase.from('listens').delete().not('ts', 'is', null)
       const { error } = await supabase
         .from('listens')
         .delete()
@@ -299,29 +462,26 @@ export default function UploadPage() {
 
       if (error) {
         console.error(error)
-        setStatus({
-          state: 'error',
-          message: 'Supabase returned an error while deleting. Please try again.',
-        })
+        setError('Supabase returned an error while deleting. Please try again.')
         return
       }
 
-      setStatus({
-        state: 'success',
-        message: 'All uploaded listens have been deleted.',
-      })
+      setSuccess('All uploaded listens have been deleted.')
     } catch (error) {
       console.error(error)
-      setStatus({
-        state: 'error',
-        message:
-          'An unexpected error occurred while deleting data. Please try again.',
-      })
+      setError('An unexpected error occurred while deleting data. Please try again.')
     }
-  }, [supabase])
+  }, [session, supabase])
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (!session) {
+        resetState('You must be signed in to upload your listening history.', 'error')
+  }, [setError, setResetting, setSuccess, supabase])
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      hasRedirectedRef.current = false
       if (!supabase) {
         setSelectedFile(null)
         setProgress(0)
@@ -331,8 +491,12 @@ export default function UploadPage() {
 
       setSelectedFile(file)
       setProgress(0)
-      setStatus({ state: 'validating', message: 'Validating file…' })
+      setValidating('Validating file…')
 
+      if (!supabase) {
+        resetState('Supabase is not configured. Please contact support.', 'error')
+        return
+      }
       // Get the current user ID
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError || !userData.user) {
@@ -342,13 +506,13 @@ export default function UploadPage() {
       const userId = userData.user.id
 
       if (!file.name.toLowerCase().endsWith('.json')) {
-        resetState('Only JSON files are supported.', 'error')
+        resetToError('Only JSON files are supported.')
         return
       }
 
       const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
       if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
-        resetState('The selected file is not recognized as JSON.', 'error')
+        resetToError('The selected file is not recognized as JSON.')
         return
       }
 
@@ -357,7 +521,7 @@ export default function UploadPage() {
         text = await file.text()
       } catch (error) {
         console.error(error)
-        resetState('Unable to read the file. Please try again.', 'error')
+        resetToError('Unable to read the file. Please try again.')
         return
       }
 
@@ -366,10 +530,17 @@ export default function UploadPage() {
         parsed = JSON.parse(text)
       } catch (error) {
         console.error(error)
-        resetState('The file does not contain valid JSON.', 'error')
+        resetToError('The file does not contain valid JSON.')
         return
       }
 
+      let rows: ListenInsert[]
+      try {
+        rows = parseSpotifyHistory(parsed)
+      } catch (error) {
+        if (error instanceof SpotifyHistoryParseError) {
+          resetToError(error.message)
+          return
       if (!Array.isArray(parsed)) {
         resetState('Expected an array of listening records in the JSON file.', 'error')
         return
@@ -392,22 +563,13 @@ export default function UploadPage() {
         if (!uniqueRows.has(key)) {
           uniqueRows.set(key, row)
         }
-      }
 
-      const rows = Array.from(uniqueRows.values())
-
-      if (rows.length === 0) {
-        resetState('No valid listening records were found in the file.', 'error')
+        console.error(error)
+        resetToError('An unexpected error occurred while processing the file.')
         return
       }
 
-      const hasTimestamp = rows.some((row) => row.ts instanceof Date && !isNaN(row.ts.getTime()))
-      if (!hasTimestamp) {
-        resetState('No timestamp information found in the uploaded file.', 'error')
-        return
-      }
-
-      setStatus({ state: 'uploading', message: 'Uploading data to Supabase…' })
+      setUploading('Uploading data to Supabase…')
 
       for (let index = 0; index < rows.length; index += BATCH_SIZE) {
         const batch = rows.slice(index, index + BATCH_SIZE)
@@ -415,10 +577,7 @@ export default function UploadPage() {
 
         if (error) {
           console.error(error)
-          resetState(
-            'Supabase returned an error while uploading. Please try again.',
-            'error',
-          )
+          resetToError('Supabase returned an error while uploading. Please try again.')
           return
         }
 
@@ -429,14 +588,25 @@ export default function UploadPage() {
 
       setProgress(100)
       setSelectedFile(null)
+      setSuccess(`Successfully uploaded ${rows.length} listening records.`)
+    },
+    [resetToError, setSuccess, setUploading, setValidating, supabase],
       setStatus({
         state: 'success',
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
+      if (!hasRedirectedRef.current) {
+        hasRedirectedRef.current = true
+        router.push('/dashboard')
+      }
     },
-    [resetState, supabase],
+    [resetState, session, supabase],
+    [resetState, router, supabase],
   )
 
+  const isBusy =
+    status.state === 'validating' || status.state === 'uploading' || status.state === 'resetting'
+  const uploadDisabled = isBusy || !session
 
   return (
     <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
@@ -474,8 +644,20 @@ export default function UploadPage() {
           </p>
         </details>
       </div>
+      {!isAuthLoading && !session ? (
+        <div className="rounded-md border border-dashed border-muted-foreground/30 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Sign in to upload and manage your listening history.
+          </p>
+          <Button asChild className="mt-3">
+            <Link href="/sign-in">Go to sign in</Link>
+          </Button>
+        </div>
+      ) : null}
       <UploadDropzone
         onFileAccepted={handleFile}
+        isBusy={uploadDisabled}
+        isBusy={isBusy}
         isBusy={
           !supabase ||
           status.state === 'validating' ||
@@ -489,6 +671,7 @@ export default function UploadPage() {
           type="button"
           variant="secondary"
           onClick={handleResetRequest}
+          disabled={isBusy || !session}
           disabled={
             !supabase ||
             status.state === 'validating' ||
