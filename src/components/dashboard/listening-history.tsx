@@ -77,12 +77,39 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
   const [currentPage, setCurrentPage] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isAuthReady, setIsAuthReady] = useState(false)
 
   const fromDate = useMemo(() => parseDateTimeInput(fromValue), [fromValue])
   const toDate = useMemo(() => parseDateTimeInput(toValue), [toValue])
   const isRangeInvalid = Boolean(
     fromDate && toDate && fromDate.getTime() > toDate.getTime()
   )
+
+  // Check authentication status
+  useEffect(() => {
+    let active = true
+    const supabase = createSupabaseBrowserClient()
+
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (active) {
+        setIsAuthReady(!!session)
+      }
+    }
+
+    void checkAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) {
+        setIsAuthReady(!!session)
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   // Fetch data when filters change
   useEffect(() => {
@@ -116,14 +143,18 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
       setTotalCount(result.data.totalCount)
     }
 
-    if (!isRangeInvalid) {
+    // Only fetch if authenticated and range is valid
+    if (isAuthReady && !isRangeInvalid) {
       void fetchData()
+    } else if (!isAuthReady) {
+      setIsLoading(false)
+      setError(null)
     }
 
     return () => {
       active = false
     }
-  }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid])
+  }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid, isAuthReady])
 
   // Reset to first page when filters change
   useEffect(() => {

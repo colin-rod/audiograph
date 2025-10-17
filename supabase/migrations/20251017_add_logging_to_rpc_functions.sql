@@ -51,14 +51,14 @@ BEGIN
 
   -- Get total count for pagination
   SELECT COUNT(*) INTO total_count_val
-  FROM listens
+  FROM listens l
   WHERE
-    user_id = current_user_id
+    l.user_id = current_user_id
     AND (search_query IS NULL OR
-         track ILIKE '%' || search_query || '%' OR
-         artist ILIKE '%' || search_query || '%')
-    AND (start_date IS NULL OR ts >= start_date)
-    AND (end_date IS NULL OR ts < end_date);
+         l.track ILIKE '%' || search_query || '%' OR
+         l.artist ILIKE '%' || search_query || '%')
+    AND (start_date IS NULL OR l.ts >= start_date)
+    AND (end_date IS NULL OR l.ts < end_date);
 
   RAISE LOG 'get_listening_history - total_count: % for user_id: %', total_count_val, current_user_id;
 
