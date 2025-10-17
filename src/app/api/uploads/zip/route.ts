@@ -5,6 +5,8 @@ import { extractJsonFromZip } from '@/lib/upload/zip-extractor'
 import { QueueClient } from '@/lib/queue/client'
 import type { ProcessJsonFileJobData } from '@/lib/queue/processor'
 
+const PROCESS_JSON_QUEUE = 'process-json-file'
+
 /**
  * POST /api/uploads/zip
  * Accepts ZIP file upload, extracts JSON files, and queues processing jobs
@@ -81,6 +83,15 @@ export async function POST(request: NextRequest) {
 
     // Queue processing jobs for each JSON file
     const boss = await QueueClient.getInstance()
+    try {
+      await boss.createQueue(PROCESS_JSON_QUEUE)
+      console.log(`[API] Queue ${PROCESS_JSON_QUEUE} ready`)
+    } catch (queueError) {
+      console.log(
+        `[API] Queue ${PROCESS_JSON_QUEUE} may already exist`,
+        queueError instanceof Error ? queueError.message : queueError
+      )
+    }
 
     for (let i = 0; i < files.length; i++) {
       const fileData = files[i]
@@ -93,7 +104,7 @@ export async function POST(request: NextRequest) {
         totalFiles: files.length,
       }
 
-      await boss.send('process-json-file', jobData, {
+      await boss.send(PROCESS_JSON_QUEUE, jobData, {
         retryLimit: 3,
         retryDelay: 1000,
         retryBackoff: true,

@@ -14,6 +14,8 @@
 import { QueueClient } from '../lib/queue/client'
 import { processJsonFileJob, type ProcessJsonFileJobData } from '../lib/queue/processor'
 
+const PROCESS_JSON_QUEUE = 'process-json-file'
+
 async function startWorker() {
   console.log('[Worker] Starting upload processor worker...')
 
@@ -21,40 +23,27 @@ async function startWorker() {
     // Get queue client
     const boss = await QueueClient.getInstance()
 
-    // Initialize the queue by sending a dummy job
-    // pg-boss requires the queue to exist before workers can subscribe
-    console.log('[Worker] Initializing queue...')
+    // Ensure the queue exists before subscribing
+    console.log(`[Worker] Ensuring queue ${PROCESS_JSON_QUEUE} exists...`)
     try {
-      await boss.send('process-json-file', {
-        uploadJobId: '__init__',
-        userId: '__init__',
-        filename: '__init__',
-        content: '[]',
-        fileIndex: 0,
-        totalFiles: 0
-      }, {
-        expireInSeconds: 1
-      })
-      console.log('[Worker] Queue initialized')
+      await boss.createQueue(PROCESS_JSON_QUEUE)
+      console.log(`[Worker] Queue ${PROCESS_JSON_QUEUE} ready`)
     } catch (initError) {
-      console.log('[Worker] Queue may already exist:', initError instanceof Error ? initError.message : String(initError))
+      console.log(
+        '[Worker] Queue may already exist:',
+        initError instanceof Error ? initError.message : String(initError)
+      )
     }
 
     // Subscribe to job queue
     console.log('[Worker] Setting up job handler...')
 
     await boss.work<ProcessJsonFileJobData>(
-      'process-json-file',
+      PROCESS_JSON_QUEUE,
       async (jobs) => {
         // pg-boss returns array of jobs, process each one
         for (const job of jobs) {
           try {
-            // Skip initialization jobs
-            if (job.data.uploadJobId === '__init__') {
-              console.log('[Worker] Skipping initialization job')
-              continue
-            }
-
             await processJsonFileJob(job as { data: ProcessJsonFileJobData })
           } catch (error) {
             console.error('[Worker] Job failed:', error)
@@ -65,7 +54,7 @@ async function startWorker() {
     )
 
     console.log('[Worker] Upload processor worker started successfully')
-    console.log('[Worker] Listening for jobs on queue: process-json-file')
+    console.log(`[Worker] Listening for jobs on queue: ${PROCESS_JSON_QUEUE}`)
     console.log('[Worker] Press Ctrl+C to stop')
 
     // Graceful shutdown
