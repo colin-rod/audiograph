@@ -61,29 +61,51 @@ interface PostHogEventPayload {
 }
 
 async function sendEvent({ event, properties, timestamp }: PostHogEventPayload) {
-  if (!POSTHOG_KEY || !distinctId) {
+  if (!POSTHOG_KEY) {
+    console.warn('[PostHog] API key not configured')
     return
   }
 
+  if (!distinctId) {
+    console.warn('[PostHog] No distinct ID available')
+    return
+  }
+
+  const endpoint = `${POSTHOG_HOST.replace(/\/$/, '')}/capture/`
+  const payload = {
+    api_key: POSTHOG_KEY,
+    event,
+    properties: {
+      distinct_id: distinctId,
+      $current_url: typeof window !== 'undefined' ? window.location.href : undefined,
+      ...properties,
+    },
+    timestamp: timestamp ?? new Date().toISOString(),
+    sent_at: new Date().toISOString(),
+  }
+
+  console.log('[PostHog Debug] Sending event:', event)
+  console.log('[PostHog Debug] Endpoint:', endpoint)
+  console.log('[PostHog Debug] Properties:', properties)
+
   try {
-    await fetch(`${POSTHOG_HOST.replace(/\/$/, '')}/capture/`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        api_key: POSTHOG_KEY,
-        event,
-        properties: {
-          distinct_id: distinctId,
-          $current_url: typeof window !== 'undefined' ? window.location.href : undefined,
-          ...properties,
-        },
-        timestamp: timestamp ?? new Date().toISOString(),
-        sent_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify(payload),
       keepalive: true,
     })
+
+    console.log('[PostHog Debug] Response status:', response.status)
+
+    if (!response.ok) {
+      const responseText = await response.text()
+      console.error('[PostHog Debug] Response error:', responseText)
+    } else {
+      console.log('[PostHog Debug] Event sent successfully')
+    }
   } catch (error) {
     console.error('Failed to send PostHog event', error)
   }
