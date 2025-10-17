@@ -35,6 +35,15 @@ export type ListeningTrendResponse = {
   listen_count: number
 }
 
+export type WeeklyListeningTrendResponse = {
+  week_start: string
+  week_end: string
+  week_number: number
+  year: number
+  total_hours: string
+  listen_count: number
+}
+
 export type ListeningClockResponse = {
   day_of_week: number
   hour_of_day: number
@@ -48,6 +57,15 @@ export type ListeningHistoryResponse = {
   ts: string
   ms_played: number | null
   total_count: number
+}
+
+export type ListeningStreakResponse = {
+  longest_streak: number | null
+  longest_streak_start: string | null
+  longest_streak_end: string | null
+  current_streak: number | null
+  current_streak_start: string | null
+  current_streak_end: string | null
 }
 
 export type TimeframeResponse = {
@@ -86,10 +104,29 @@ export type ListeningTrendDatum = {
   hours: number
 }
 
+export type WeeklyListeningTrendDatum = {
+  weekStart: string
+  weekEnd: string
+  weekNumber: number
+  year: number
+  label: string
+  description: string
+  hours: number
+}
+
 export type ListeningClockDatum = {
   day: number
   hour: number
   hours: number
+}
+
+export type ListeningStreakStats = {
+  longestStreak: number
+  longestStreakStart: string | null
+  longestStreakEnd: string | null
+  currentStreak: number
+  currentStreakStart: string | null
+  currentStreakEnd: string | null
 }
 
 export type ListeningHistoryDatum = {
@@ -184,12 +221,55 @@ export const transformListeningTrend = (
   }
 }
 
+export const transformWeeklyListeningTrend = (
+  data: WeeklyListeningTrendResponse
+): WeeklyListeningTrendDatum => {
+  const weekStartDate = new Date(data.week_start)
+  const weekEndDate = new Date(data.week_end)
+
+  const axisFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  })
+
+  const detailFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+
+  const startLabel = axisFormatter.format(weekStartDate)
+  const endLabel = axisFormatter.format(weekEndDate)
+  const description = `${detailFormatter.format(weekStartDate)} – ${detailFormatter.format(weekEndDate)}`
+
+  return {
+    weekStart: data.week_start,
+    weekEnd: data.week_end,
+    weekNumber: data.week_number,
+    year: data.year,
+    label: `${startLabel} – ${endLabel}`,
+    description,
+    hours: Number(data.total_hours),
+  }
+}
+
 export const transformListeningClock = (
   data: ListeningClockResponse
 ): ListeningClockDatum => ({
   day: data.day_of_week,
   hour: data.hour_of_day,
   hours: Number(data.total_hours),
+})
+
+export const transformListeningStreak = (
+  data: ListeningStreakResponse
+): ListeningStreakStats => ({
+  longestStreak: data.longest_streak ?? 0,
+  longestStreakStart: data.longest_streak_start,
+  longestStreakEnd: data.longest_streak_end,
+  currentStreak: data.current_streak ?? 0,
+  currentStreakStart: data.current_streak_start,
+  currentStreakEnd: data.current_streak_end,
 })
 
 export const transformListeningHistory = (

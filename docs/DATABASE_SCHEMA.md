@@ -275,6 +275,48 @@ Get monthly listening trends with time window filtering.
 
 ---
 
+### `get_weekly_listening_trends(start_date, end_date)`
+
+Get weekly listening trends with time window filtering.
+
+#### Parameters
+
+Same as `get_listening_trends`.
+
+#### Returns
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `week_start` | `timestamptz` | Beginning of the ISO week |
+| `week_end` | `timestamptz` | End of the ISO week |
+| `week_number` | `integer` | ISO week number |
+| `year` | `integer` | ISO year for the week |
+| `total_hours` | `numeric` | Total hours played in the week |
+| `listen_count` | `bigint` | Number of listens in the week |
+
+---
+
+### `get_listening_streaks(start_date, end_date)`
+
+Get longest and current listening streak statistics with time window filtering.
+
+#### Parameters
+
+Same as `get_listening_trends`.
+
+#### Returns
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `longest_streak` | `integer` | Length of the longest streak in days |
+| `longest_streak_start` | `date` | Start of the longest streak |
+| `longest_streak_end` | `date` | End of the longest streak |
+| `current_streak` | `integer` | Length of the current streak in days |
+| `current_streak_start` | `date` | Start of the current streak |
+| `current_streak_end` | `date` | End of the current streak |
+
+---
+
 ### `get_listening_clock(start_date, end_date)`
 
 Get listening clock heatmap data with time window filtering.
