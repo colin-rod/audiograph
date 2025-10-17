@@ -121,15 +121,22 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
       setError(null)
 
       const timeParams = timeframeToParams(timeframeFilter)
-      const result = await getListeningHistory(supabase, {
+      const fetchParams = {
         search_query: query.trim() || null,
         start_date: fromDate?.toISOString() ?? timeParams.start_date,
         end_date: toDate?.toISOString() ?? timeParams.end_date,
         limit_count: PAGE_SIZE,
         offset_count: currentPage * PAGE_SIZE,
-      })
+      }
 
-      if (!active) return
+      console.log('[ListeningHistory] Fetching with params:', fetchParams)
+
+      const result = await getListeningHistory(supabase, fetchParams)
+
+      if (!active) {
+        console.log('[ListeningHistory] Request aborted - component unmounted or deps changed')
+        return
+      }
 
       setIsLoading(false)
 
@@ -139,6 +146,7 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
         return
       }
 
+      console.log('[ListeningHistory] Updating state with', result.data.data.length, 'listens, totalCount:', result.data.totalCount)
       setListens(result.data.data)
       setTotalCount(result.data.totalCount)
     }
@@ -166,6 +174,7 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
   const hasPrevPage = currentPage > 0
 
   const displayListens = useMemo(() => {
+    console.log('[ListeningHistory] Computing displayListens - isRangeInvalid:', isRangeInvalid, 'listens.length:', listens.length)
     if (isRangeInvalid) {
       return []
     }
