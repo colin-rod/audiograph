@@ -17,6 +17,11 @@ import { ListeningTrendsChart, ListeningTrendsChartSkeleton } from "@/components
 import { TopArtistsChart, TopArtistsChartSkeleton } from "@/components/dashboard/top-artists-chart"
 import { TopTracksTable, TopTracksTableSkeleton } from "@/components/dashboard/top-tracks-table"
 import { WeeklyCadenceChart, WeeklyCadenceChartSkeleton } from "@/components/dashboard/weekly-cadence-chart"
+import {
+  DiscoveryTracker,
+  DiscoveryTrackerSkeleton,
+} from "@/components/dashboard/discovery-tracker"
+import { LoyaltyGauge, LoyaltyGaugeSkeleton } from "@/components/dashboard/loyalty-gauge"
 import { Button } from "@/components/ui/button"
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { createSupabaseClient } from "@/lib/supabaseClient"
@@ -314,54 +319,125 @@ export default function DashboardPage() {
       </AnimatePresence>
       <section
         aria-label="Artist and track insights"
-        className="grid gap-6 lg:grid-cols-2"
+        className="space-y-6"
       >
-        <AnimatePresence mode="wait">
-          {dashboardData ? (
-            <motion.div
-              key={`top-artists-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <TopArtistsChart data={dashboardData.topArtists} className="h-full" />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`top-artists-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <TopArtistsChartSkeleton className="h-full" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <AnimatePresence mode="wait">
-          {dashboardData ? (
-            <motion.div
-              key={`top-tracks-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <TopTracksTable data={dashboardData.topTracks} className="h-full" />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`top-tracks-skeleton-${activeTimeframeKey}`}
-              initial={sectionMotion.initial}
-              animate={sectionMotion.animate}
-              exit={sectionMotion.exit}
-              className="h-full"
-            >
-              <TopTracksTableSkeleton className="h-full" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Artist & track deep dives
+          </h2>
+          <p className="text-muted-foreground">
+            Spot the newcomers in your rotation and see which songs keep you
+            hitting replay.
+          </p>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`top-artists-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TopArtistsChart
+                  data={dashboardData.topArtists}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`top-artists-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TopArtistsChartSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`top-tracks-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TopTracksTable
+                  data={dashboardData.topTracks}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`top-tracks-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <TopTracksTableSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`discovery-tracker-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <DiscoveryTracker
+                  data={dashboardData.discoveryTracker}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`discovery-tracker-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <DiscoveryTrackerSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            {dashboardData ? (
+              <motion.div
+                key={`loyalty-gauge-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <LoyaltyGauge
+                  data={dashboardData.loyaltyGauge}
+                  className="h-full"
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`loyalty-gauge-skeleton-${activeTimeframeKey}`}
+                initial={sectionMotion.initial}
+                animate={sectionMotion.animate}
+                exit={sectionMotion.exit}
+                className="h-full"
+              >
+                <LoyaltyGaugeSkeleton className="h-full" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </section>
       <section aria-label="Time-based insights" className="space-y-6">
         <div className="space-y-1">

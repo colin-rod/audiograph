@@ -16,6 +16,7 @@ import type {
   ListeningStreakResponse,
   ListeningTrendDatum,
   ListeningTrendResponse,
+  DiscoveryTrackerDatum,
   PaginationParams,
   TimeframeData,
   TimeframeFilter,
@@ -27,6 +28,9 @@ import type {
   TopTrackDatum,
   TopTrackResponse,
   TopTracksParams,
+  LoyaltyGaugeData,
+  LoyaltyTrendDatum,
+  TopRepeatTrackDatum,
   WeeklyListeningTrendDatum,
   WeeklyListeningTrendResponse,
 } from "./analytics-types"
@@ -92,6 +96,14 @@ const hasRpc = (
   supabase: SupabaseClient
 ): supabase is SupabaseClient & { rpc: SupabaseClient["rpc"] } =>
   typeof (supabase as { rpc?: SupabaseClient["rpc"] }).rpc === "function"
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+})
+
+const formatMonthLabel = (year: number, month: number) =>
+  MONTH_LABEL_FORMATTER.format(new Date(Date.UTC(year, month - 1, 1)))
 
 // ============================================================================
 // Core Analytics Functions
@@ -366,6 +378,165 @@ export async function getListeningClock(
 }
 
 /**
+ * Fetch first-time artist and track discovery counts by month
+ */
+export async function getDiscoveryTracker(
+  supabase: SupabaseClient,
+  params: TimeWindowParams = {}
+): Promise<AnalyticsResult<DiscoveryTrackerDatum[]>> {
+  if (!hasRpc(supabase)) {
+    return getDiscoveryTrackerFallback(supabase, params)
+  }
+
+  type DiscoveryTrackerResponse = {
+    month: string
+    new_artists: number
+    new_tracks: number
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("get_discovery_tracker", {
+      start_date: params.start_date ?? null,
+      end_date: params.end_date ?? null,
+    })
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return getDiscoveryTrackerFallback(supabase, params)
+      }
+
+      return {
+        success: false,
+        error: new AnalyticsError(
+          "Failed to fetch discovery tracker",
+          error.code,
+          error
+        ),
+      }
+    }
+
+    const rows = (data as DiscoveryTrackerResponse[] | null) ?? []
+
+    const transformed = rows
+      .map((row) => {
+        const [yearStr, monthStr] = row.month.split("-")
+        const year = Number(yearStr)
+        const month = Number(monthStr)
+
+        if (!Number.isFinite(year) || !Number.isFinite(month)) {
+          return null
+        }
+
+        return {
+          month: row.month,
+          label: formatMonthLabel(year, month),
+          newArtists: row.new_artists,
+          newTracks: row.new_tracks,
+        }
+      })
+      .filter((value): value is DiscoveryTrackerDatum => value !== null)
+
+    return {
+      success: true,
+      data: transformed,
+    }
+  } catch (error) {
+    return getDiscoveryTrackerFallback(supabase, params)
+  }
+}
+
+/**
+ * Fetch loyalty metrics for repeat listens
+ */
+export async function getLoyaltyGauge(
+  supabase: SupabaseClient,
+  params: TimeWindowParams = {}
+): Promise<AnalyticsResult<LoyaltyGaugeData>> {
+  if (!hasRpc(supabase)) {
+    return getLoyaltyGaugeFallback(supabase, params)
+  }
+
+  type LoyaltyGaugeResponse = {
+    month: string
+    repeat_listen_share: number
+    repeat_listen_count: number
+    total_listen_count: number
+    threshold: number
+    top_tracks: TopRepeatTrackDatum[]
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("get_loyalty_gauge", {
+      start_date: params.start_date ?? null,
+      end_date: params.end_date ?? null,
+    })
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return getLoyaltyGaugeFallback(supabase, params)
+      }
+
+      return {
+        success: false,
+        error: new AnalyticsError(
+          "Failed to fetch loyalty gauge",
+          error.code,
+          error
+        ),
+      }
+    }
+
+    const rows = (data as LoyaltyGaugeResponse[] | null) ?? []
+
+    if (!rows.length) {
+      return {
+        success: true,
+        data: {
+          threshold: 5,
+          monthly: [],
+          topRepeatTracks: [],
+        },
+      }
+    }
+
+    const threshold = rows[0]?.threshold ?? 5
+
+    const monthly: LoyaltyTrendDatum[] = rows
+      .map((row) => {
+        const [yearStr, monthStr] = row.month.split("-")
+        const year = Number(yearStr)
+        const month = Number(monthStr)
+
+        if (!Number.isFinite(year) || !Number.isFinite(month)) {
+          return null
+        }
+
+        return {
+          month: row.month,
+          label: formatMonthLabel(year, month),
+          repeatListenShare: row.repeat_listen_share,
+          repeatListenCount: row.repeat_listen_count,
+          totalListenCount: row.total_listen_count,
+        }
+      })
+      .filter((value): value is LoyaltyTrendDatum => value !== null)
+
+    const topRepeatTracks = rows[0]?.top_tracks ?? []
+
+    return {
+      success: true,
+      data: {
+        threshold,
+        monthly,
+        topRepeatTracks,
+      },
+    }
+  } catch (error) {
+    return getLoyaltyGaugeFallback(supabase, params)
+  }
+}
+
+/**
  * Fetch listening streak statistics
  */
 export async function getListeningStreaks(
@@ -599,6 +770,8 @@ export async function getDashboardData(
     weeklyTrendsResult,
     streakResult,
     clockResult,
+    discoveryResult,
+    loyaltyResult,
   ] = await Promise.all([
     getDashboardSummary(supabase, params),
     getTopArtists(supabase, { ...params, limit_count: 5 }),
@@ -607,6 +780,8 @@ export async function getDashboardData(
     getWeeklyListeningTrends(supabase, params),
     getListeningStreaks(supabase, params),
     getListeningClock(supabase, params),
+    getDiscoveryTracker(supabase, params),
+    getLoyaltyGauge(supabase, params),
   ])
 
   // Check for errors
@@ -631,6 +806,12 @@ export async function getDashboardData(
   if (!clockResult.success) {
     return { success: false as const, error: clockResult.error }
   }
+  if (!discoveryResult.success) {
+    return { success: false as const, error: discoveryResult.error }
+  }
+  if (!loyaltyResult.success) {
+    return { success: false as const, error: loyaltyResult.error }
+  }
 
   return {
     success: true as const,
@@ -642,6 +823,8 @@ export async function getDashboardData(
       weeklyListeningTrends: weeklyTrendsResult.data,
       listeningStreak: streakResult.data,
       listeningClock: clockResult.data,
+      discoveryTracker: discoveryResult.data,
+      loyaltyGauge: loyaltyResult.data,
     },
   }
 }
@@ -1151,6 +1334,212 @@ const getListeningStreaksFallback = async (
       current_streak_start: trailingStart.toISOString(),
       current_streak_end: lastDay.toISOString(),
     }),
+  }
+}
+
+const monthKeyFromDate = (date: Date) => {
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth() + 1
+  const key = `${year}-${String(month).padStart(2, "0")}`
+  return { key, year, month }
+}
+
+const includeInWindow = (date: Date, params: TimeWindowParams = {}) => {
+  const { start, end } = normalizeTimeWindow(params)
+  if (start && date < start) {
+    return false
+  }
+  if (end && date >= end) {
+    return false
+  }
+  return true
+}
+
+const getDiscoveryTrackerFallback = async (
+  supabase: SupabaseClient,
+  params: TimeWindowParams = {}
+): Promise<AnalyticsResult<DiscoveryTrackerDatum[]>> => {
+  const listensResult = await fetchValidListens(supabase, params)
+  if (!listensResult.success) {
+    return listensResult
+  }
+
+  const listens = [...listensResult.data].sort(
+    (a, b) => a.ts.getTime() - b.ts.getTime()
+  )
+
+  const firstTracks = new Map<string, Date>()
+  const firstArtists = new Map<string, Date>()
+
+  for (const listen of listens) {
+    if (listen.track && !firstTracks.has(listen.track)) {
+      firstTracks.set(listen.track, listen.ts)
+    }
+    if (listen.artist && !firstArtists.has(listen.artist)) {
+      firstArtists.set(listen.artist, listen.ts)
+    }
+  }
+
+  const monthTotals = new Map<
+    string,
+    { year: number; month: number; newArtists: number; newTracks: number }
+  >()
+
+  for (const [, firstDate] of firstTracks.entries()) {
+    if (!includeInWindow(firstDate, params)) {
+      continue
+    }
+    const { key, year, month } = monthKeyFromDate(firstDate)
+    const entry =
+      monthTotals.get(key) ?? { year, month, newArtists: 0, newTracks: 0 }
+    entry.newTracks += 1
+    monthTotals.set(key, entry)
+  }
+
+  for (const [, firstDate] of firstArtists.entries()) {
+    if (!includeInWindow(firstDate, params)) {
+      continue
+    }
+    const { key, year, month } = monthKeyFromDate(firstDate)
+    const entry =
+      monthTotals.get(key) ?? { year, month, newArtists: 0, newTracks: 0 }
+    entry.newArtists += 1
+    monthTotals.set(key, entry)
+  }
+
+  const data: DiscoveryTrackerDatum[] = Array.from(monthTotals.values())
+    .sort((a, b) => {
+      const aDate = Date.UTC(a.year, a.month - 1, 1)
+      const bDate = Date.UTC(b.year, b.month - 1, 1)
+      return aDate - bDate
+    })
+    .map((entry) => ({
+      month: `${entry.year}-${String(entry.month).padStart(2, "0")}`,
+      label: formatMonthLabel(entry.year, entry.month),
+      newArtists: entry.newArtists,
+      newTracks: entry.newTracks,
+    }))
+
+  return { success: true, data }
+}
+
+const REPEAT_TRACK_THRESHOLD = 5
+
+const getLoyaltyGaugeFallback = async (
+  supabase: SupabaseClient,
+  params: TimeWindowParams = {}
+): Promise<AnalyticsResult<LoyaltyGaugeData>> => {
+  const listensResult = await fetchValidListens(supabase, params)
+  if (!listensResult.success) {
+    return listensResult
+  }
+
+  const filtered = filterListensByWindow(listensResult.data, params)
+  if (!filtered.length) {
+    return {
+      success: true,
+      data: {
+        threshold: REPEAT_TRACK_THRESHOLD,
+        monthly: [],
+        topRepeatTracks: [],
+      },
+    }
+  }
+
+  const trackTotals = new Map<
+    string,
+    { count: number; artist: string | null }
+  >()
+
+  for (const listen of filtered) {
+    if (!listen.track) {
+      continue
+    }
+
+    const entry = trackTotals.get(listen.track) ?? {
+      count: 0,
+      artist: listen.artist ?? null,
+    }
+
+    entry.count += 1
+    if (!entry.artist && listen.artist) {
+      entry.artist = listen.artist
+    }
+    trackTotals.set(listen.track, entry)
+  }
+
+  const repeatTracks = new Set(
+    Array.from(trackTotals.entries())
+      .filter(([, info]) => info.count >= REPEAT_TRACK_THRESHOLD)
+      .map(([track]) => track)
+  )
+
+  const monthTotals = new Map<
+    string,
+    {
+      year: number
+      month: number
+      totalListens: number
+      repeatListens: number
+    }
+  >()
+
+  for (const listen of filtered) {
+    if (!listen.track) {
+      continue
+    }
+
+    const { key, year, month } = monthKeyFromDate(listen.ts)
+    const entry =
+      monthTotals.get(key) ?? {
+        year,
+        month,
+        totalListens: 0,
+        repeatListens: 0,
+      }
+
+    entry.totalListens += 1
+    if (repeatTracks.has(listen.track)) {
+      entry.repeatListens += 1
+    }
+
+    monthTotals.set(key, entry)
+  }
+
+  const monthly: LoyaltyTrendDatum[] = Array.from(monthTotals.values())
+    .sort((a, b) => {
+      const aDate = Date.UTC(a.year, a.month - 1, 1)
+      const bDate = Date.UTC(b.year, b.month - 1, 1)
+      return aDate - bDate
+    })
+    .map((entry) => ({
+      month: `${entry.year}-${String(entry.month).padStart(2, "0")}`,
+      label: formatMonthLabel(entry.year, entry.month),
+      repeatListenShare:
+        entry.totalListens > 0 ? entry.repeatListens / entry.totalListens : 0,
+      repeatListenCount: entry.repeatListens,
+      totalListenCount: entry.totalListens,
+    }))
+
+  const topRepeatTracks: TopRepeatTrackDatum[] = Array.from(
+    trackTotals.entries()
+  )
+    .filter(([, info]) => info.count >= REPEAT_TRACK_THRESHOLD)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([track, info]) => ({
+      track,
+      artist: info.artist,
+      playCount: info.count,
+    }))
+
+  return {
+    success: true,
+    data: {
+      threshold: REPEAT_TRACK_THRESHOLD,
+      monthly,
+      topRepeatTracks,
+    },
   }
 }
 

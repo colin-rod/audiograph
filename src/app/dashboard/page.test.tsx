@@ -299,6 +299,12 @@ describe("Dashboard page", () => {
       screen.getByTestId("top-tracks-table-skeleton")
     ).toBeInTheDocument()
     expect(
+      screen.getByTestId("discovery-tracker-skeleton")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId("loyalty-gauge-skeleton")
+    ).toBeInTheDocument()
+    expect(
       screen.getByTestId("listening-trends-chart-skeleton")
     ).toBeInTheDocument()
     expect(
@@ -404,6 +410,12 @@ describe("Dashboard page", () => {
       screen.queryByTestId("top-tracks-table-skeleton")
     ).not.toBeInTheDocument()
     expect(
+      screen.queryByTestId("discovery-tracker-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("loyalty-gauge-skeleton")
+    ).not.toBeInTheDocument()
+    expect(
       screen.queryByTestId("listening-trends-chart-skeleton")
     ).not.toBeInTheDocument()
     expect(
@@ -436,6 +448,9 @@ describe("Dashboard page", () => {
     expect(screen.getAllByText("Artist B")[0]).toBeInTheDocument()
 
     expect(screen.getByRole("heading", { name: /top tracks/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /artist & track deep dives/i })
+    ).toBeInTheDocument()
     const tracksTable = screen.getByRole("table", {
       name: /ordered by total listening hours/i,
     })
@@ -456,6 +471,17 @@ describe("Dashboard page", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("heading", { name: /listening streaks/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /discovery tracker/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: /loyalty gauge/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /no tracks have crossed the 5-play mark yet in this timeframe/i
+      )
     ).toBeInTheDocument()
     expect(
       screen.getByRole("heading", { name: /time-based insights/i })
