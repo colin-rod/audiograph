@@ -2,13 +2,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
-import { parseAndMapJson } from '@/lib/upload/spotify-mapper'
 
 export const dynamic = "force-dynamic"
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { X, FileJson, CheckCircle2, AlertCircle } from 'lucide-react'
 
 type StatusState = {
   state: 'idle' | 'validating' | 'uploading' | 'processing' | 'resetting' | 'success' | 'error'
@@ -25,9 +25,20 @@ type UploadJobStatus = {
   errorMessage?: string | null
 }
 
-const BATCH_SIZE = 500
+type SelectedFile = {
+  file: File
+  valid: boolean
+  error?: string
+}
+
 const SUPABASE_CONFIG_ERROR_MESSAGE =
   'Supabase environment variables are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable uploads.'
+
+const SPOTIFY_FILE_PATTERNS = [
+  /Streaming_History_Audio.*\.json$/i,
+  /StreamingHistory.*\.json$/i,
+  /endsong.*\.json$/i
+]
 
 const formatFileSize = (size: number) => {
   if (size >= 1024 * 1024) {
@@ -39,20 +50,128 @@ const formatFileSize = (size: number) => {
   return `${size} B`
 }
 
-type UploadDropzoneProps = {
-  onFileAccepted: (file: File) => void
-  isBusy: boolean
-  selectedFile: File | null
+function isSpotifyFile(filename: string): boolean {
+  return SPOTIFY_FILE_PATTERNS.some(pattern => pattern.test(filename))
 }
 
-function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzoneProps) {
+function validateFile(file: File): { valid: boolean; error?: string } {
+  if (!file.name.toLowerCase().endsWith('.json')) {
+    return { valid: false, error: 'Not a JSON file' }
+  }
+
+  if (!isSpotifyFile(file.name)) {
+    return { valid: false, error: 'Not a recognized Spotify file format' }
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    return { valid: false, error: 'File too large (max 10MB)' }
+  }
+
+  if (file.size === 0) {
+    return { valid: false, error: 'File is empty' }
+  }
+
+  return { valid: true }
+}
+
+type FileListDisplayProps = {
+  selectedFiles: SelectedFile[]
+  onRemoveFile: (index: number) => void
+  isBusy: boolean
+}
+
+function FileListDisplay({ selectedFiles, onRemoveFile, isBusy }: FileListDisplayProps) {
+  const validFiles = selectedFiles.filter(sf => sf.valid)
+  const invalidFiles = selectedFiles.filter(sf => !sf.valid)
+
+  return (
+    <div className="space-y-4">
+      {validFiles.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            Ready to upload ({validFiles.length} file{validFiles.length === 1 ? '' : 's'})
+          </h3>
+          <div className="space-y-1">
+            {selectedFiles.map((sf, index) => {
+              if (!sf.valid) return null
+              return (
+                <div
+                  key={index}
+                  className="flex items-center justify-between rounded border border-green-200 bg-green-50 p-2 text-sm dark:border-green-900 dark:bg-green-950"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <FileJson className="h-4 w-4 shrink-0 text-green-600" />
+                    <span className="truncate font-medium">{sf.file.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      ({formatFileSize(sf.file.size)})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onRemoveFile(index)}
+                    disabled={isBusy}
+                    className="ml-2 rounded p-1 hover:bg-green-100 dark:hover:bg-green-900 disabled:opacity-50"
+                    aria-label={`Remove ${sf.file.name}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {invalidFiles.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium flex items-center gap-2 text-amber-600">
+            <AlertCircle className="h-4 w-4" />
+            Invalid files ({invalidFiles.length})
+          </h3>
+          <div className="space-y-1">
+            {selectedFiles.map((sf, index) => {
+              if (sf.valid) return null
+              return (
+                <div
+                  key={index}
+                  className="flex items-center justify-between rounded border border-amber-200 bg-amber-50 p-2 text-sm dark:border-amber-900 dark:bg-amber-950"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <FileJson className="h-4 w-4 shrink-0 text-amber-600" />
+                    <span className="truncate">{sf.file.name}</span>
+                    <span className="text-xs text-amber-600 truncate">({sf.error})</span>
+                  </div>
+                  <button
+                    onClick={() => onRemoveFile(index)}
+                    disabled={isBusy}
+                    className="ml-2 rounded p-1 hover:bg-amber-100 dark:hover:bg-amber-900 disabled:opacity-50"
+                    aria-label={`Remove ${sf.file.name}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type UploadDropzoneProps = {
+  onFilesAccepted: (files: File[]) => void
+  isBusy: boolean
+  selectedFiles: SelectedFile[]
+}
+
+function UploadDropzone({ onFilesAccepted, isBusy, selectedFiles }: UploadDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return
-    const [file] = Array.from(files)
-    onFileAccepted(file)
+    onFilesAccepted(Array.from(files))
   }
 
   const onDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
@@ -84,13 +203,16 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
     handleFiles(event.dataTransfer.files)
   }
 
+  const hasFiles = selectedFiles.length > 0
+
   return (
     <div className="space-y-4">
       <input
         ref={inputRef}
         id="spotify-upload"
         type="file"
-        accept=".json,.zip,application/json,application/zip"
+        accept=".json,application/json"
+        multiple
         className="sr-only"
         onChange={(event) => handleFiles(event.target.files)}
         disabled={isBusy}
@@ -114,15 +236,16 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
             isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/40'
           } ${isBusy ? 'opacity-70' : 'cursor-pointer hover:border-primary'}`}
         >
-          <p className="text-sm font-medium">Drag and drop your Spotify data here</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Supports JSON files or ZIP archives (recommended)
+          <FileJson className="h-12 w-12 text-muted-foreground mb-4" />
+          <p className="text-sm font-medium">
+            {hasFiles ? 'Add more JSON files' : 'Drag and drop JSON files here'}
           </p>
-          {selectedFile ? (
-            <p className="mt-4 text-sm font-medium">
-              Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-            </p>
-          ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Select one or multiple Spotify JSON files
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            (Streaming_History_Audio_*.json, StreamingHistory*.json, or endsong*.json)
+          </p>
         </div>
       </label>
       <div className="flex justify-center">
@@ -131,7 +254,7 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
           onClick={() => inputRef.current?.click()}
           disabled={isBusy}
         >
-          Choose File
+          {hasFiles ? 'Add More Files' : 'Choose Files'}
         </Button>
       </div>
     </div>
@@ -153,7 +276,7 @@ export default function UploadPage() {
     supabase
       ? {
           state: 'idle',
-          message: 'Select a Spotify listening history file or ZIP archive to begin.',
+          message: 'Select one or more Spotify JSON files to begin.',
         }
       : {
           state: 'error',
@@ -161,15 +284,17 @@ export default function UploadPage() {
         },
   )
   const [progress, setProgress] = useState(0)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([])
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
   const [uploadJobId, setUploadJobId] = useState<string | null>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  const validFileCount = selectedFiles.filter(sf => sf.valid).length
+
   const resetState = useCallback(
     (message: StatusState['message'], state: StatusState['state']) => {
       setProgress(0)
-      setSelectedFile(null)
+      setSelectedFiles([])
       setStatus({ state, message })
       setUploadJobId(null)
       if (pollingIntervalRef.current) {
@@ -208,7 +333,7 @@ export default function UploadPage() {
           state: 'success',
           message: `Successfully processed ${jobStatus.totalFiles} files with ${jobStatus.totalRecords} listening records.`,
         })
-        setSelectedFile(null)
+        setSelectedFiles([])
         setUploadJobId(null)
 
         // Stop polling
@@ -252,6 +377,73 @@ export default function UploadPage() {
     }
   }, [uploadJobId, pollUploadStatus])
 
+  const handleFilesAccepted = useCallback((files: File[]) => {
+    const newFiles: SelectedFile[] = files.map(file => {
+      const validation = validateFile(file)
+      return {
+        file,
+        valid: validation.valid,
+        error: validation.error
+      }
+    })
+
+    setSelectedFiles(prev => [...prev, ...newFiles])
+  }, [])
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleUpload = useCallback(async () => {
+    if (!supabase) {
+      setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
+      return
+    }
+
+    const validFiles = selectedFiles.filter(sf => sf.valid)
+    if (validFiles.length === 0) {
+      setStatus({ state: 'error', message: 'No valid files selected' })
+      return
+    }
+
+    setStatus({ state: 'uploading', message: `Uploading ${validFiles.length} file${validFiles.length === 1 ? '' : 's'}...` })
+
+    try {
+      const formData = new FormData()
+      validFiles.forEach(sf => {
+        formData.append('files', sf.file)
+      })
+
+      const response = await fetch('/api/uploads/json', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to upload files')
+      }
+
+      const result = await response.json()
+      setUploadJobId(result.uploadJobId)
+      setStatus({
+        state: 'processing',
+        message: result.message,
+      })
+
+      // Show warnings if any files were skipped
+      if (result.skippedFiles > 0 && result.errors) {
+        console.warn('Some files were skipped:', result.errors)
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      resetState(
+        error instanceof Error ? error.message : 'Failed to upload files',
+        'error'
+      )
+    }
+  }, [supabase, selectedFiles, resetState])
+
   const handleResetRequest = useCallback(() => {
     if (!supabase) {
       setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
@@ -271,7 +463,7 @@ export default function UploadPage() {
       return
     }
     setProgress(0)
-    setSelectedFile(null)
+    setSelectedFiles([])
     setStatus({
       state: 'resetting',
       message: 'Deleting existing listens from Supabase…',
@@ -315,224 +507,86 @@ export default function UploadPage() {
     }
   }, [supabase])
 
-  const handleZipUpload = useCallback(async (file: File) => {
-    setStatus({ state: 'uploading', message: 'Uploading ZIP file...' })
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('/api/uploads/zip', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to upload ZIP file')
-      }
-
-      const result = await response.json()
-      setUploadJobId(result.uploadJobId)
-      setStatus({
-        state: 'processing',
-        message: `Uploaded ${result.totalFiles} files. Processing...`,
-      })
-    } catch (error) {
-      console.error('ZIP upload error:', error)
-      resetState(
-        error instanceof Error ? error.message : 'Failed to upload ZIP file',
-        'error'
-      )
-    }
-  }, [resetState])
-
-  const handleJsonUpload = useCallback(
-    async (file: File, userId: string) => {
-      setStatus({ state: 'validating', message: 'Validating file…' })
-
-      let text: string
-      try {
-        text = await file.text()
-      } catch (error) {
-        console.error(error)
-        resetState('Unable to read the file. Please try again.', 'error')
-        return
-      }
-
-      const parseResult = parseAndMapJson(text, userId)
-
-      if (!parseResult.success) {
-        resetState(parseResult.error, 'error')
-        return
-      }
-
-      const rows = parseResult.records
-
-      if (rows.length === 0) {
-        resetState('No valid listening records were found in the file.', 'error')
-        return
-      }
-
-      setStatus({ state: 'uploading', message: 'Uploading data to Supabase…' })
-
-      for (let index = 0; index < rows.length; index += BATCH_SIZE) {
-        const batch = rows.slice(index, index + BATCH_SIZE)
-        const { error } = await supabase!.from('listens').insert(batch)
-
-        if (error) {
-          console.error(error)
-          resetState(
-            'Supabase returned an error while uploading. Please try again.',
-            'error',
-          )
-          return
-        }
-
-        const uploadedCount = Math.min(index + batch.length, rows.length)
-        const percent = Math.round((uploadedCount / rows.length) * 100)
-        setProgress(percent)
-      }
-
-      setProgress(100)
-      setSelectedFile(null)
-      setStatus({
-        state: 'success',
-        message: `Successfully uploaded ${rows.length} listening records.`,
-      })
-
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 1500)
-    },
-    [resetState, supabase, router],
-  )
-
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (!supabase) {
-        setSelectedFile(null)
-        setProgress(0)
-        setStatus({ state: 'error', message: SUPABASE_CONFIG_ERROR_MESSAGE })
-        return
-      }
-
-      setSelectedFile(file)
-      setProgress(0)
-
-      const { data: userData, error: userError } = await supabase.auth.getUser()
-      if (userError || !userData.user) {
-        resetState('You must be signed in to upload data.', 'error')
-        return
-      }
-
-      const fileName = file.name.toLowerCase()
-
-      if (fileName.endsWith('.zip')) {
-        await handleZipUpload(file)
-      } else if (fileName.endsWith('.json')) {
-        const allowedTypes = ['application/json', 'text/json', 'application/octet-stream']
-        if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
-          resetState('The selected file is not recognized as JSON.', 'error')
-          return
-        }
-        await handleJsonUpload(file, userData.user.id)
-      } else {
-        resetState('Only JSON and ZIP files are supported.', 'error')
-      }
-    },
-    [resetState, supabase, handleZipUpload, handleJsonUpload],
-  )
+  const isBusy = ['validating', 'uploading', 'processing', 'resetting'].includes(status.state)
 
   return (
-    <Card className="mx-auto mt-12 max-w-xl space-y-6 p-8">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold">Upload your Spotify Listening History</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Upload JSON files individually or a ZIP archive with multiple files.
-        </p>
-        <details className="mt-4 text-left text-sm text-muted-foreground">
-          <summary className="cursor-pointer font-medium text-foreground">
-            Need help downloading your Spotify data?
-          </summary>
-          <ol className="mt-2 list-decimal space-y-2 pl-5">
-            <li>
-              Visit Spotify&apos;s{' '}
-              <a
-                className="underline"
-                href="https://www.spotify.com/account/privacy/"
-                target="_blank"
-                rel="noreferrer"
+    <div className="container mx-auto max-w-3xl p-6">
+      <Card className="p-6">
+        <h1 className="mb-6 text-2xl font-bold">Upload Spotify Data</h1>
+
+        <div className="space-y-6">
+          <UploadDropzone
+            onFilesAccepted={handleFilesAccepted}
+            isBusy={isBusy}
+            selectedFiles={selectedFiles}
+          />
+
+          {selectedFiles.length > 0 && (
+            <FileListDisplay
+              selectedFiles={selectedFiles}
+              onRemoveFile={handleRemoveFile}
+              isBusy={isBusy}
+            />
+          )}
+
+          {validFileCount > 0 && (
+            <div className="flex justify-center">
+              <Button
+                onClick={handleUpload}
+                disabled={isBusy}
+                size="lg"
               >
-                Privacy Settings
-              </a>{' '}
-              and sign in.
-            </li>
-            <li>Select <strong>Download your data</strong>, then choose the <strong>Extended streaming history</strong> option.</li>
-            <li>Submit the request and wait for Spotify&apos;s email confirming your archive is ready.</li>
-            <li>
-              Download the ZIP from Spotify&apos;s email and upload it directly here, or extract it and upload individual <code>StreamingHistory*.json</code> files.
-            </li>
-          </ol>
-          <p className="mt-2">
-            <strong>💡 Tip:</strong> Uploading the entire ZIP archive is faster and more convenient!
-          </p>
-        </details>
-      </div>
-      <UploadDropzone
-        onFileAccepted={handleFile}
-        isBusy={
-          !supabase ||
-          status.state === 'validating' ||
-          status.state === 'uploading' ||
-          status.state === 'processing' ||
-          status.state === 'resetting'
-        }
-        selectedFile={selectedFile}
-      />
-      <div className="flex justify-center">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleResetRequest}
-          disabled={
-            !supabase ||
-            status.state === 'validating' ||
-            status.state === 'uploading' ||
-            status.state === 'processing' ||
-            status.state === 'resetting'
-          }
-          aria-label="Reset uploaded data"
-        >
-          Reset uploaded data
-        </Button>
-      </div>
+                Upload {validFileCount} File{validFileCount === 1 ? '' : 's'}
+              </Button>
+            </div>
+          )}
+
+          {(status.state !== 'idle' || progress > 0) && (
+            <div className="space-y-2">
+              <p className="text-sm">
+                <span
+                  className={
+                    status.state === 'error'
+                      ? 'text-red-600'
+                      : status.state === 'success'
+                        ? 'text-green-600'
+                        : ''
+                  }
+                >
+                  {status.message}
+                </span>
+              </p>
+              {progress > 0 && progress < 100 && (
+                <Progress value={progress} className="w-full" />
+              )}
+            </div>
+          )}
+
+          <div className="mt-6 border-t pt-6">
+            <p className="mb-4 text-sm text-muted-foreground">
+              Need to start over? Delete all uploaded listens and upload fresh data.
+            </p>
+            <Button
+              variant="destructive"
+              onClick={handleResetRequest}
+              disabled={isBusy}
+            >
+              Delete All Data
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       <ConfirmDialog
         open={isResetDialogOpen}
-        onCancel={handleCancelReset}
-        onConfirm={handleConfirmReset}
-        title="Delete uploaded listens?"
-        description="This will remove all uploaded listening history from Supabase. This action cannot be undone."
-        confirmLabel="Delete"
+        title="Delete all uploaded data?"
+        description="This will permanently delete all listening history records from your account. This action cannot be undone."
+        confirmLabel="Delete All Data"
         cancelLabel="Cancel"
+        onConfirm={handleConfirmReset}
+        onCancel={handleCancelReset}
+        confirmButtonVariant="destructive"
       />
-      <div className="space-y-2">
-        {(status.state === 'uploading' || status.state === 'processing' || progress > 0) && (
-          <Progress value={progress} aria-live="polite" />
-        )}
-        <p
-          className={`text-sm ${
-            status.state === 'error'
-              ? 'text-destructive'
-              : status.state === 'success'
-              ? 'text-green-600'
-              : 'text-muted-foreground'
-          }`}
-          aria-live="polite"
-        >
-          {status.message}
-        </p>
-      </div>
-    </Card>
+    </div>
   )
 }
