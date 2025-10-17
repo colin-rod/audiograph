@@ -79,6 +79,8 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
   const [error, setError] = useState<string | null>(null)
   const [isAuthReady, setIsAuthReady] = useState(false)
 
+  console.log('[ListeningHistory] RENDER - query:', query, 'listens.length:', listens.length, 'totalCount:', totalCount)
+
   const fromDate = useMemo(() => parseDateTimeInput(fromValue), [fromValue])
   const toDate = useMemo(() => parseDateTimeInput(toValue), [toValue])
 
@@ -168,6 +170,7 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
       }
 
       console.log('[ListeningHistory] Updating state with', result.data.data.length, 'listens, totalCount:', result.data.totalCount)
+      console.log('[ListeningHistory] First listen:', result.data.data[0])
       setListens(result.data.data)
       setTotalCount(result.data.totalCount)
     }
@@ -315,6 +318,9 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
             <TableBody>
               {displayListens.length ? (
                 displayListens.map((listen, index) => {
+                  if (index === 0) {
+                    console.log('[ListeningHistory] Rendering first row:', { track: listen.track, artist: listen.artist, ts: listen.ts })
+                  }
                   const timestamp = listen.ts ? new Date(listen.ts) : null
                   const formattedTimestamp =
                     timestamp && !Number.isNaN(timestamp.getTime())
