@@ -342,15 +342,6 @@ const SignInContent = () => {
                   : "Use password instead"}
               </Button>
 
-              <Button
-                variant="secondary"
-                className="w-full"
-                asChild
-              >
-                <Link href="/" aria-label="Continue without logging in">
-                  Continue without login
-                </Link>
-              </Button>
             </div>
           </form>
 
