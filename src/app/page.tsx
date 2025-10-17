@@ -3,8 +3,16 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export function LandingPage() {
+export async function LandingPage() {
+  const supabase = createSupabaseServerClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const isAuthenticated = !!session;
+
+  // Determine upload href: if not authenticated, go to sign-in with next param
+  const uploadHref = isAuthenticated ? "/upload" : "/sign-in?next=/upload";
+
   return (
     <div className="space-y-24 pb-24">
       <section className="bg-gradient-to-b from-background via-background to-muted/40">
@@ -22,7 +30,7 @@ export function LandingPage() {
             </p>
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
               <Button asChild variant="primary" size="lg" className="w-full sm:w-auto">
-                <Link href="/upload">Upload your history</Link>
+                <Link href={uploadHref}>Upload your history</Link>
               </Button>
               <Button asChild variant="secondary" size="lg" className="w-full sm:w-auto">
                 <Link href="#privacy">Learn about privacy</Link>
@@ -102,7 +110,7 @@ export function LandingPage() {
                 away.
               </p>
               <Button asChild variant="primary">
-                <Link href="/upload">Go to upload</Link>
+                <Link href={uploadHref}>Go to upload</Link>
               </Button>
             </CardContent>
           </Card>

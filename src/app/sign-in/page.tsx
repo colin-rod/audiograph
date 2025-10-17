@@ -47,6 +47,7 @@ const SignInContent = () => {
   const searchParams = useSearchParams()
   const messageParam = searchParams.get("message")
   const errorParam = searchParams.get("error")
+  const nextParam = searchParams.get("next")
   const initialMessage = useMemo(
     () => buildCallbackMessage(messageParam, errorParam),
     [messageParam, errorParam]
@@ -79,11 +80,16 @@ const SignInContent = () => {
     setStatusMessage(null)
 
     try {
-      const redirectUrl = `${window.location.origin}/auth/callback`
+      // Build redirect URL with next parameter if present
+      const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (nextParam) {
+        callbackUrl.searchParams.set("next", nextParam)
+      }
+
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
         options: {
-          emailRedirectTo: redirectUrl,
+          emailRedirectTo: callbackUrl.toString(),
         },
       })
 
