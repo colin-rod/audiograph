@@ -57,8 +57,15 @@ export class QueueClient {
 
       console.log('[Queue] Initializing pg-boss...')
 
-      // Create pg-boss instance with connection string
-      bossInstance = new PgBoss(finalConnectionString)
+      // Create pg-boss instance with connection string and SSL options
+      // Note: Supabase pooler requires SSL, but we need to allow self-signed certs in dev
+      bossInstance = new PgBoss({
+        connectionString: finalConnectionString,
+        // Add SSL configuration for Supabase
+        ssl: connectionString.includes('supabase.co') ? {
+          rejectUnauthorized: false // Accept self-signed certificates
+        } : undefined
+      })
 
       console.log('[Queue] Starting pg-boss...')
       await bossInstance.start()
