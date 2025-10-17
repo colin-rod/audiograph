@@ -71,9 +71,7 @@ async function sendEvent({ event, properties, timestamp }: PostHogEventPayload) 
     return
   }
 
-  const endpoint = `${POSTHOG_HOST.replace(/\/$/, '')}/capture/`
   const payload = {
-    api_key: POSTHOG_KEY,
     event,
     properties: {
       distinct_id: distinctId,
@@ -84,12 +82,12 @@ async function sendEvent({ event, properties, timestamp }: PostHogEventPayload) 
     sent_at: new Date().toISOString(),
   }
 
-  console.log('[PostHog Debug] Sending event:', event)
-  console.log('[PostHog Debug] Endpoint:', endpoint)
+  console.log('[PostHog Debug] Sending event via proxy:', event)
   console.log('[PostHog Debug] Properties:', properties)
 
   try {
-    const response = await fetch(endpoint, {
+    // Use our Next.js API proxy to avoid CORS and ad blocker issues
+    const response = await fetch('/api/posthog-proxy', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

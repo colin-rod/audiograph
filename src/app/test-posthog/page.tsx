@@ -151,15 +151,14 @@ export default function TestPostHogPage() {
         <h3 className="mb-2 font-semibold">How to Verify:</h3>
         <ol className="list-inside list-decimal space-y-1 text-sm">
           <li>Open browser DevTools (Network tab)</li>
-          <li>Filter by "capture" to see PostHog requests</li>
           <li>Click any test button above</li>
           <li>
             Look for POST requests to{' '}
             <code className="rounded bg-gray-200 px-1 dark:bg-gray-800">
-              {process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'}
-              /capture/
+              /api/posthog-proxy
             </code>
           </li>
+          <li>Check the Console tab for debug logs</li>
           <li>
             Check your PostHog dashboard at{' '}
             <a
@@ -177,14 +176,13 @@ export default function TestPostHogPage() {
         </ol>
       </div>
 
-      <div className="mt-4 rounded-lg border border-yellow-500 bg-yellow-50 p-4 dark:bg-yellow-950">
-        <h3 className="mb-2 font-semibold text-yellow-800 dark:text-yellow-200">
-          Ad Blocker Warning:
+      <div className="mt-4 rounded-lg border border-green-500 bg-green-50 p-4 dark:bg-green-950">
+        <h3 className="mb-2 font-semibold text-green-800 dark:text-green-200">
+          ✓ Ad Blocker Bypass Enabled
         </h3>
-        <p className="text-sm text-yellow-700 dark:text-yellow-300">
-          If you have an ad blocker enabled, PostHog requests may be blocked.
-          Check the Console for any network errors. Consider temporarily
-          disabling the ad blocker or whitelisting PostHog for testing.
+        <p className="text-sm text-green-700 dark:text-green-300">
+          Events are routed through /api/posthog-proxy to bypass ad blockers
+          and CORS restrictions. This works even with ad blockers enabled!
         </p>
       </div>
     </div>
