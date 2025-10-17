@@ -107,8 +107,8 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
       setIsLoading(false)
 
       if (!result.success) {
-        setError("Failed to load listening history")
-        console.error(result.error)
+        setError(result.error.message)
+        console.error('[ListeningHistory] Error:', result.error)
         return
       }
 

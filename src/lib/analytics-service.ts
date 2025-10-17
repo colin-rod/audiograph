@@ -282,6 +282,14 @@ export async function getListeningHistory(
   }>
 > {
   try {
+    console.log('[Analytics] Fetching listening history with params:', {
+      search_query: params.search_query ?? null,
+      start_date: params.start_date ?? null,
+      end_date: params.end_date ?? null,
+      limit_count: params.limit_count ?? 50,
+      offset_count: params.offset_count ?? 0,
+    })
+
     const { data, error } = await supabase.rpc("get_listening_history", {
       search_query: params.search_query ?? null,
       start_date: params.start_date ?? null,
@@ -291,18 +299,29 @@ export async function getListeningHistory(
     })
 
     if (error) {
+      console.error('[Analytics] Error fetching listening history:', error)
+
+      // Provide more specific error messages
+      let errorMessage = "Failed to fetch listening history"
+      if (error.code === 'AUTH1' || error.message?.includes('Authentication required')) {
+        errorMessage = "Please log in to view your listening history"
+      } else if (error.code === 'PGRST116') {
+        errorMessage = "Database function not found. Please contact support."
+      }
+
       return {
         success: false,
-        error: new AnalyticsError(
-          "Failed to fetch listening history",
-          error.code,
-          error
-        ),
+        error: new AnalyticsError(errorMessage, error.code, error),
       }
     }
 
     const rows = (data as ListeningHistoryResponse[]) ?? []
     const totalCount = rows.length > 0 ? rows[0].total_count : 0
+
+    console.log('[Analytics] Listening history fetched successfully:', {
+      rowCount: rows.length,
+      totalCount,
+    })
 
     return {
       success: true,
@@ -312,6 +331,7 @@ export async function getListeningHistory(
       },
     }
   } catch (error) {
+    console.error('[Analytics] Unexpected error fetching listening history:', error)
     return {
       success: false,
       error: new AnalyticsError(
