@@ -21,8 +21,26 @@ async function startWorker() {
     // Get queue client
     const boss = await QueueClient.getInstance()
 
+    // Initialize the queue by sending a dummy job
+    // pg-boss requires the queue to exist before workers can subscribe
+    console.log('[Worker] Initializing queue...')
+    try {
+      await boss.send('process-json-file', {
+        uploadJobId: '__init__',
+        userId: '__init__',
+        filename: '__init__',
+        content: '[]',
+        fileIndex: 0,
+        totalFiles: 0
+      }, {
+        expireInSeconds: 1
+      })
+      console.log('[Worker] Queue initialized')
+    } catch (initError) {
+      console.log('[Worker] Queue may already exist:', initError instanceof Error ? initError.message : String(initError))
+    }
+
     // Subscribe to job queue
-    // The queue will be created automatically when the first job is sent from the API
     console.log('[Worker] Setting up job handler...')
 
     await boss.work<ProcessJsonFileJobData>(
@@ -31,6 +49,12 @@ async function startWorker() {
         // pg-boss returns array of jobs, process each one
         for (const job of jobs) {
           try {
+            // Skip initialization jobs
+            if (job.data.uploadJobId === '__init__') {
+              console.log('[Worker] Skipping initialization job')
+              continue
+            }
+
             await processJsonFileJob(job as { data: ProcessJsonFileJobData })
           } catch (error) {
             console.error('[Worker] Job failed:', error)

@@ -58,17 +58,19 @@ Use the direct database connection (port 5432) instead of the pooler, but this h
 
 ## Queue Initialization Fix
 
-Also simplified the worker initialization:
+The worker now properly initializes the queue before listening:
 
-### Before:
-- Worker tried to create a dummy job to initialize the queue
-- This caused "Queue does not exist" errors
-- Complex initialization logic
+### The Problem:
+pg-boss requires a queue to exist before workers can subscribe to it. The queue is created when the first job is sent, but if the worker starts before any jobs are sent, it crashes with "Queue does not exist".
 
-### After:
-- Worker simply starts listening
-- Queue is created automatically when the first job is sent from the API
-- Simpler, more reliable
+### The Solution:
+1. Worker sends a dummy initialization job on startup
+2. This creates the queue if it doesn't exist
+3. The dummy job expires in 1 second
+4. Worker then subscribes to the queue
+5. Worker skips any initialization jobs it processes
+
+This ensures the queue always exists when the worker tries to listen to it.
 
 ## Testing
 
