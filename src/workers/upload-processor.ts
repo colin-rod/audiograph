@@ -40,7 +40,8 @@ async function startWorker() {
 
       if (dummyJobId) {
         // Cancel the dummy job immediately
-        await boss.cancel(dummyJobId)
+        // pg-boss.cancel(name, id) signature
+        await boss.cancel('process-json-file', dummyJobId)
         console.log('[Worker] Queue initialized successfully')
       }
     } catch (initError) {
@@ -51,10 +52,6 @@ async function startWorker() {
     // Subscribe to job queue
     await boss.work<ProcessJsonFileJobData>(
       'process-json-file',
-      {
-        teamSize: 5, // Process up to 5 jobs concurrently
-        teamConcurrency: 1, // Each worker processes 1 job at a time
-      },
       async (jobs) => {
         // pg-boss returns array of jobs, process each one
         for (const job of jobs) {
@@ -76,7 +73,6 @@ async function startWorker() {
 
     console.log('[Worker] Upload processor worker started successfully')
     console.log('[Worker] Listening for jobs on queue: process-json-file')
-    console.log('[Worker] Worker configuration: teamSize=5, teamConcurrency=1')
     console.log('[Worker] Press Ctrl+C to stop')
 
     // Graceful shutdown

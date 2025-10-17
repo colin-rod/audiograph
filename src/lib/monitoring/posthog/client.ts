@@ -4,7 +4,7 @@ import type { ReadonlyURLSearchParams } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY || ''
-const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
+// const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
 const DISTINCT_ID_STORAGE_KEY = 'audiograph.posthog.distinctId'
 
 let distinctId: string | null = null

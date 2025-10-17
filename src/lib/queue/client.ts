@@ -43,46 +43,22 @@ export class QueueClient {
     console.log('[Queue] Connection string found, attempting to connect...')
 
     try {
-      // Configure pg-boss with connection settings that prefer IPv4
-      const pgBossOptions = {
-        connectionString,
-        // Add connection string suffix to force IPv4 resolution if not already present
-        ...(connectionString.includes('?') ? {} : {}),
-        // Configure connection pool with timeout settings
-        db: {
-          connectionTimeoutMillis: 15000,
-          // Add node-pg connection options
-          options: undefined
-        },
-        // Schema settings
-        schema: 'pgboss',
-        // Explicitly set supervisor and scheduling
-        noSupervisor: false,
-        noScheduling: false,
-        // Archive settings
-        archiveCompletedAfterSeconds: 60 * 60 * 12, // 12 hours
-        deleteAfterDays: 7
-      }
-
-      // Modify connection string to add IPv4 preference if using Supabase
+      // Modify connection string to add connection parameters if using Supabase
       let finalConnectionString = connectionString
 
-      // If this is a Supabase connection, ensure we're using the direct connection
-      // Supabase supports both IPv4 and IPv6, but we want IPv4
+      // If this is a Supabase connection, ensure we're using the connection pooler
       if (connectionString.includes('supabase.co')) {
         console.log('[Queue] Detected Supabase connection, adding connection parameters...')
 
-        // Add IPv4 preference and connection pooling parameters
+        // Add SSL mode if not already present
         const separator = connectionString.includes('?') ? '&' : '?'
         finalConnectionString = `${connectionString}${separator}sslmode=require`
       }
 
       console.log('[Queue] Initializing pg-boss...')
 
-      bossInstance = new PgBoss({
-        ...pgBossOptions,
-        connectionString: finalConnectionString
-      })
+      // Create pg-boss instance with connection string
+      bossInstance = new PgBoss(finalConnectionString)
 
       console.log('[Queue] Starting pg-boss...')
       await bossInstance.start()
@@ -96,14 +72,23 @@ export class QueueClient {
 
       // Log more details for debugging
       if (error instanceof Error) {
+        // Type guard for NodeJS.ErrnoException properties
+        const nodeError = error as Error & {
+          code?: string
+          errno?: number
+          syscall?: string
+          address?: string
+          port?: number
+        }
+
         console.error('[Queue] Error details:', {
           message: error.message,
           name: error.name,
-          code: (error as any).code,
-          errno: (error as any).errno,
-          syscall: (error as any).syscall,
-          address: (error as any).address,
-          port: (error as any).port
+          code: nodeError.code,
+          errno: nodeError.errno,
+          syscall: nodeError.syscall,
+          address: nodeError.address,
+          port: nodeError.port
         })
       }
 

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { parseAndMapJson, type ListenInsert } from '../upload/spotify-mapper'
+import { parseAndMapJson } from '../upload/spotify-mapper'
 
 /**
  * Batch size for inserting records

@@ -440,7 +440,7 @@ export async function getDiscoveryTracker(
       success: true,
       data: transformed,
     }
-  } catch (error) {
+  } catch {
     return getDiscoveryTrackerFallback(supabase, params)
   }
 }
@@ -531,7 +531,7 @@ export async function getLoyaltyGauge(
         topRepeatTracks,
       },
     }
-  } catch (error) {
+  } catch {
     return getLoyaltyGaugeFallback(supabase, params)
   }
 }
@@ -874,7 +874,7 @@ const filterListensByWindow = (
 
 const fetchValidListens = async (
   supabase: SupabaseClient,
-  params: TimeWindowParams = {}
+  _params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<ValidListen[]>> => {
   const fromFn = (supabase as { from?: SupabaseClient["from"] }).from
 
