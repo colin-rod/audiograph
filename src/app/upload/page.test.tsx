@@ -4,21 +4,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UploadPage from "./page";
 
-const { createSupabaseClientMock, fromMock, deleteMock, notMock } = vi.hoisted(() => {
-  const localNotMock = vi.fn();
-  const localDeleteMock = vi.fn(() => ({ not: localNotMock }));
+const { createSupabaseClientMock, fromMock, deleteMock, eqMock, useRouterMock, pushMock } = vi.hoisted(() => {
+  const localEqMock = vi.fn();
+  const localDeleteMock = vi.fn(() => ({ eq: localEqMock }));
   const localFromMock = vi.fn(() => ({ delete: localDeleteMock }));
+  const push = vi.fn();
+  const useRouter = vi.fn(() => ({
+    push,
+  }));
   const localCreateSupabaseClientMock = vi.fn(() => ({
     from: localFromMock,
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: { user: { id: "user-1", email: "user@example.com" } },
+        error: null,
+      })),
+    },
   }));
 
   return {
     createSupabaseClientMock: localCreateSupabaseClientMock,
     fromMock: localFromMock,
     deleteMock: localDeleteMock,
-    notMock: localNotMock,
+    eqMock: localEqMock,
+    useRouterMock: useRouter,
+    pushMock: push,
   };
 });
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => useRouterMock(),
+}));
 
 vi.mock("@/lib/supabaseClient", () => ({
   createSupabaseClient: createSupabaseClientMock,
@@ -29,8 +45,8 @@ describe("UploadPage reset controls", () => {
     createSupabaseClientMock.mockClear();
     fromMock.mockClear();
     deleteMock.mockClear();
-    notMock.mockClear();
-    notMock.mockResolvedValue({ error: null });
+    eqMock.mockClear();
+    eqMock.mockResolvedValue({ error: null });
   });
 
   it("confirms with the user and deletes listens on approval", async () => {
@@ -49,7 +65,7 @@ describe("UploadPage reset controls", () => {
 
     await waitFor(() => expect(fromMock).toHaveBeenCalledWith("listens"));
     expect(deleteMock).toHaveBeenCalled();
-    expect(notMock).toHaveBeenCalledWith("ts", "is", null);
+    expect(eqMock).toHaveBeenCalledWith("user_id", "user-1");
 
     await waitFor(() =>
       expect(screen.getByText("All uploaded listens have been deleted.")).toBeInTheDocument(),
@@ -76,9 +92,9 @@ describe("UploadPage reset controls", () => {
 
     expect(fromMock).not.toHaveBeenCalled();
     expect(deleteMock).not.toHaveBeenCalled();
-    expect(notMock).not.toHaveBeenCalled();
+    expect(eqMock).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Select a Spotify listening history JSON file to begin."),
+      screen.getByText("Select a Spotify listening history file or ZIP archive to begin."),
     ).toBeInTheDocument();
 
     await waitFor(() =>
@@ -87,7 +103,7 @@ describe("UploadPage reset controls", () => {
   });
 
   it("surfaces Supabase errors to the user", async () => {
-    notMock.mockResolvedValueOnce({ error: { message: "failure" } });
+    eqMock.mockResolvedValueOnce({ error: { message: "failure" } });
     const user = userEvent.setup();
 
     render(<UploadPage />);
@@ -101,7 +117,7 @@ describe("UploadPage reset controls", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
-    await waitFor(() => expect(notMock).toHaveBeenCalled());
+    await waitFor(() => expect(eqMock).toHaveBeenCalled());
 
     await waitFor(() =>
       expect(
