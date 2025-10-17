@@ -7,14 +7,18 @@
 -- ============================================================================
 
 -- Upload job status enum
-CREATE TYPE upload_job_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+DO $$ BEGIN
+  CREATE TYPE upload_job_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- TABLES
 -- ============================================================================
 
 -- Upload jobs table for tracking ZIP upload processing
-CREATE TABLE upload_jobs (
+CREATE TABLE IF NOT EXISTS upload_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   status upload_job_status NOT NULL DEFAULT 'pending',
