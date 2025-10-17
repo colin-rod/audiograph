@@ -23,27 +23,17 @@ const buildCallbackMessage = (message: string | null, error: string | null) => {
   }
 
   switch (message) {
-    case "missing-code":
+    case "signup-success":
       return {
-        intent: "error" as const,
-        text: "We couldn't complete the sign-in link. Please request a new email.",
-      }
-    case "signin-error":
-      return {
-        intent: "error" as const,
-        text: "There was a problem completing your sign-in link. Please try again.",
-      }
-    case "signed-out":
-      return {
-        intent: "info" as const,
-        text: "You've been signed out. Use the form below to sign in again.",
+        intent: "success" as const,
+        text: "Account created! Check your email to confirm your account.",
       }
     default:
       return null
   }
 }
 
-const SignInContent = () => {
+const SignUpContent = () => {
   const searchParams = useSearchParams()
   const messageParam = searchParams.get("message")
   const errorParam = searchParams.get("error")
@@ -55,7 +45,7 @@ const SignInContent = () => {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [authMode, setAuthMode] = useState<"magic-link" | "password">("password")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(
     "idle"
   )
@@ -66,62 +56,39 @@ const SignInContent = () => {
     initialMessage?.intent ?? null
   )
 
-  const handlePasswordSignIn = async () => {
+  const handlePasswordSignUp = async () => {
     const trimmedEmail = email.trim()
 
-    if (!trimmedEmail || !password) {
+    if (!trimmedEmail || !password || !confirmPassword) {
       setStatus("error")
       setStatusIntent("error")
-      setStatusMessage("Please enter both email and password.")
+      setStatusMessage("Please fill in all fields.")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setStatus("error")
+      setStatusIntent("error")
+      setStatusMessage("Passwords do not match.")
+      return
+    }
+
+    if (password.length < 6) {
+      setStatus("error")
+      setStatusIntent("error")
+      setStatusMessage("Password must be at least 6 characters long.")
       return
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password: password,
-      })
-
-      if (error) {
-        setStatus("error")
-        setStatusIntent("error")
-        setStatusMessage(error.message ?? "Unable to sign in.")
-        return
-      }
-
-      if (data.session) {
-        // Redirect to dashboard or next page
-        const redirectUrl = nextParam ?? "/dashboard"
-        window.location.href = redirectUrl
-      }
-    } catch (error) {
-      setStatus("error")
-      setStatusIntent("error")
-      setStatusMessage(
-        error instanceof Error ? error.message : "Unexpected error occurred."
-      )
-    }
-  }
-
-  const handleMagicLinkSignIn = async () => {
-    const trimmedEmail = email.trim()
-
-    if (!trimmedEmail) {
-      setStatus("error")
-      setStatusIntent("error")
-      setStatusMessage("Please enter your email address.")
-      return
-    }
-
-    try {
-      // Build redirect URL with next parameter if present
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (nextParam) {
         callbackUrl.searchParams.set("next", nextParam)
       }
 
-      const { error } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
+        password: password,
         options: {
           emailRedirectTo: callbackUrl.toString(),
         },
@@ -130,16 +97,25 @@ const SignInContent = () => {
       if (error) {
         setStatus("error")
         setStatusIntent("error")
-        setStatusMessage(error.message ?? "Unable to send sign-in email.")
+        setStatusMessage(error.message ?? "Unable to create account.")
         return
       }
 
-      setStatus("success")
-      setStatusIntent("success")
-      setStatusMessage(
-        "Check your inbox for a sign-in link. It may take a moment to arrive."
-      )
-      setEmail("")
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        setStatus("success")
+        setStatusIntent("success")
+        setStatusMessage(
+          "Account created! Check your email to confirm your account before signing in."
+        )
+        setEmail("")
+        setPassword("")
+        setConfirmPassword("")
+      } else if (data.session) {
+        // Auto sign-in successful
+        const redirectUrl = nextParam ?? "/dashboard"
+        window.location.href = redirectUrl
+      }
     } catch (error) {
       setStatus("error")
       setStatusIntent("error")
@@ -156,14 +132,10 @@ const SignInContent = () => {
     setStatusIntent(null)
     setStatusMessage(null)
 
-    if (authMode === "password") {
-      await handlePasswordSignIn()
-    } else {
-      await handleMagicLinkSignIn()
-    }
+    await handlePasswordSignUp()
   }
 
-  const handleOAuthSignIn = async (provider: "google" | "spotify") => {
+  const handleOAuthSignUp = async (provider: "google" | "spotify") => {
     setStatus("loading")
     setStatusIntent(null)
     setStatusMessage(null)
@@ -185,7 +157,7 @@ const SignInContent = () => {
       if (error) {
         setStatus("error")
         setStatusIntent("error")
-        setStatusMessage(error.message ?? `Unable to sign in with ${provider}.`)
+        setStatusMessage(error.message ?? `Unable to sign up with ${provider}.`)
         return
       }
 
@@ -203,11 +175,9 @@ const SignInContent = () => {
     <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Sign in to Audiograph</CardTitle>
+          <CardTitle className="text-2xl">Create your account</CardTitle>
           <CardDescription>
-            {authMode === "password"
-              ? "Enter your email and password to sign in."
-              : "Enter your email address and we'll send you a sign-in link."}
+            Sign up to start tracking your music listening history.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -232,7 +202,7 @@ const SignInContent = () => {
               variant="outline"
               className="w-full"
               disabled={status === "loading"}
-              onClick={() => handleOAuthSignIn("google")}
+              onClick={() => handleOAuthSignUp("google")}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path
@@ -259,7 +229,7 @@ const SignInContent = () => {
               variant="outline"
               className="w-full"
               disabled={status === "loading"}
-              onClick={() => handleOAuthSignIn("spotify")}
+              onClick={() => handleOAuthSignUp("spotify")}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
@@ -274,7 +244,7 @@ const SignInContent = () => {
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-background px-2 text-muted-foreground">
-                Or continue with email
+                Or sign up with email
               </span>
             </div>
           </div>
@@ -296,23 +266,37 @@ const SignInContent = () => {
               />
             </div>
 
-            {authMode === "password" && (
-              <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  disabled={status === "loading"}
-                  required
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Create a password (min. 6 characters)"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={status === "loading"}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="confirm-password" className="text-sm font-medium">
+                Confirm password
+              </label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                disabled={status === "loading"}
+                required
+              />
+            </div>
 
             <div className="space-y-2">
               <Button
@@ -321,25 +305,7 @@ const SignInContent = () => {
                 className="w-full"
                 disabled={status === "loading"}
               >
-                {status === "loading"
-                  ? (authMode === "password" ? "Signing in..." : "Sending email...")
-                  : (authMode === "password" ? "Sign in with password" : "Send magic link")}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                disabled={status === "loading"}
-                onClick={() => {
-                  setAuthMode(authMode === "password" ? "magic-link" : "password")
-                  setStatusMessage(null)
-                  setStatusIntent(null)
-                }}
-              >
-                {authMode === "password"
-                  ? "Use magic link instead"
-                  : "Use password instead"}
+                {status === "loading" ? "Creating account..." : "Create account"}
               </Button>
 
               <Button
@@ -347,7 +313,7 @@ const SignInContent = () => {
                 className="w-full"
                 asChild
               >
-                <Link href="/" aria-label="Continue without logging in">
+                <Link href="/" aria-label="Continue without signing up">
                   Continue without login
                 </Link>
               </Button>
@@ -355,9 +321,9 @@ const SignInContent = () => {
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Don&rsquo;t have an account?{" "}
-            <Link className="font-medium text-primary" href="/sign-up">
-              Sign up
+            Already have an account?{" "}
+            <Link className="font-medium text-primary" href="/sign-in">
+              Sign in
             </Link>
           </p>
         </CardContent>
@@ -366,18 +332,20 @@ const SignInContent = () => {
   )
 }
 
-const SignInFallback = () => (
+const SignUpFallback = () => (
   <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center px-4 py-12">
     <Card className="w-full max-w-md animate-pulse">
       <CardHeader>
-        <CardTitle className="text-2xl">Loading sign in...</CardTitle>
+        <CardTitle className="text-2xl">Loading sign up...</CardTitle>
         <CardDescription>
-          Preparing the sign-in experience. Please wait a moment.
+          Preparing the sign-up experience. Please wait a moment.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div className="h-4 rounded bg-muted" />
+          <div className="h-10 rounded bg-muted" />
+          <div className="h-10 rounded bg-muted" />
           <div className="h-10 rounded bg-muted" />
           <div className="h-10 rounded bg-muted" />
         </div>
@@ -386,10 +354,10 @@ const SignInFallback = () => (
   </div>
 )
 
-export default function SignInPage() {
+export default function SignUpPage() {
   return (
-    <Suspense fallback={<SignInFallback />}>
-      <SignInContent />
+    <Suspense fallback={<SignUpFallback />}>
+      <SignUpContent />
     </Suspense>
   )
 }
