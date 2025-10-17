@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabaseClient'
 
 export const dynamic = "force-dynamic"
@@ -223,6 +224,7 @@ function UploadDropzone({ onFileAccepted, isBusy, selectedFile }: UploadDropzone
 }
 
 export default function UploadPage() {
+  const router = useRouter()
   const supabase = useMemo(() => {
     try {
       return createSupabaseClient()
@@ -433,8 +435,13 @@ export default function UploadPage() {
         state: 'success',
         message: `Successfully uploaded ${rows.length} listening records.`,
       })
+
+      // Redirect to dashboard after successful upload
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 1500)
     },
-    [resetState, supabase],
+    [resetState, supabase, router],
   )
 
 
