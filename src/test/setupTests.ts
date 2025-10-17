@@ -62,3 +62,37 @@ if (!window.matchMedia) {
     }),
   })
 }
+
+// Polyfill for File.arrayBuffer() in Node.js test environment (jsdom)
+if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
+  File.prototype.arrayBuffer = function(this: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (reader.error) {
+          reject(reader.error)
+        } else {
+          resolve(reader.result as ArrayBuffer)
+        }
+      }
+      reader.readAsArrayBuffer(this)
+    })
+  }
+}
+
+// Polyfill for Blob.arrayBuffer() in Node.js test environment (jsdom)
+if (typeof Blob !== 'undefined' && !Blob.prototype.arrayBuffer) {
+  Blob.prototype.arrayBuffer = function(this: Blob): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (reader.error) {
+          reject(reader.error)
+        } else {
+          resolve(reader.result as ArrayBuffer)
+        }
+      }
+      reader.readAsArrayBuffer(this)
+    })
+  }
+}

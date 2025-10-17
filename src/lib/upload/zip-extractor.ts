@@ -7,9 +7,14 @@ const MAX_ZIP_SIZE = 100 * 1024 * 1024
 
 /**
  * Patterns to identify Spotify JSON files
- * Matches: StreamingHistory*.json, endsong*.json (case-insensitive)
+ * Matches:
+ * - Streaming_History_Audio_*.json (Extended Streaming History)
+ * - StreamingHistory*.json (old format)
+ * - endsong*.json (old format)
+ * (case-insensitive)
  */
 const SPOTIFY_FILE_PATTERNS = [
+  /Streaming_History_Audio.*\.json$/i,
   /StreamingHistory.*\.json$/i,
   /endsong.*\.json$/i
 ]
@@ -91,7 +96,7 @@ export async function extractJsonFromZip(file: File): Promise<ExtractResult> {
     if (extractedFiles.length === 0) {
       return {
         success: false,
-        error: 'No Spotify JSON files found in the ZIP archive. Expected files like StreamingHistory*.json or endsong*.json.'
+        error: 'No Spotify JSON files found in the ZIP archive. Expected files like Streaming_History_Audio_*.json, StreamingHistory*.json, or endsong*.json.'
       }
     }
 

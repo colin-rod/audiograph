@@ -31,15 +31,16 @@ describe('extractJsonFromZip', () => {
     }
   })
 
-  it('filters for Spotify file patterns (StreamingHistory*, endsong*)', async () => {
+  it('filters for Spotify file patterns (Streaming_History_Audio*, StreamingHistory*, endsong*)', async () => {
     const zip = new JSZip()
     const spotifyContent = JSON.stringify([{ ts: '2024-01-01T00:00:00Z' }])
 
+    zip.file('Streaming_History_Audio_2021-2025.json', spotifyContent)
     zip.file('StreamingHistory_music_0.json', spotifyContent)
     zip.file('endsong_0.json', spotifyContent)
     zip.file('ReadMe.pdf', 'This is a PDF file')
     zip.file('some_other_file.json', '{"data": "ignored"}')
-    zip.file('MyData/StreamingHistory_music_1.json', spotifyContent)
+    zip.file('Spotify Extended Streaming History/Streaming_History_Audio_2023-2025.json', spotifyContent)
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const zipFile = new File([zipBlob], 'spotify_data.zip', { type: 'application/zip' })
@@ -48,20 +49,22 @@ describe('extractJsonFromZip', () => {
 
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.files).toHaveLength(3)
+      expect(result.files).toHaveLength(4)
       const filenames = result.files.map(f => f.filename)
+      expect(filenames).toContain('Streaming_History_Audio_2021-2025.json')
       expect(filenames).toContain('StreamingHistory_music_0.json')
       expect(filenames).toContain('endsong_0.json')
-      expect(filenames).toContain('MyData/StreamingHistory_music_1.json')
+      expect(filenames).toContain('Spotify Extended Streaming History/Streaming_History_Audio_2023-2025.json')
       expect(filenames).not.toContain('ReadMe.pdf')
       expect(filenames).not.toContain('some_other_file.json')
     }
   })
 
-  it('rejects ZIP with no JSON files', async () => {
+  it('rejects ZIP with no Spotify JSON files', async () => {
     const zip = new JSZip()
     zip.file('ReadMe.pdf', 'This is a PDF file')
     zip.file('Info.txt', 'Some info')
+    zip.file('some_other_file.json', '{"data": "ignored"}')
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const zipFile = new File([zipBlob], 'empty.zip', { type: 'application/zip' })
