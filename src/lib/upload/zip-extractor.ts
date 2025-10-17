@@ -57,7 +57,8 @@ export async function extractJsonFromZip(file: File): Promise<ExtractResult> {
   try {
     // Load and parse ZIP file
     const zip = new JSZip()
-    const zipContents = await zip.loadAsync(file)
+    const arrayBuffer = await file.arrayBuffer()
+    const zipContents = await zip.loadAsync(arrayBuffer)
 
     // Extract all Spotify JSON files
     const extractedFiles: ExtractedFile[] = []
