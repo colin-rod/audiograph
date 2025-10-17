@@ -119,10 +119,7 @@ async function sendEvent(payload: SentryEvent) {
     return
   }
 
-  const endpoint = createSentryStoreUrl(dsn)
-  const authHeader = createSentryAuthHeader(dsn, 'audiograph-client/1.0')
-
-  console.log('[Sentry Debug] Sending event to:', endpoint)
+  console.log('[Sentry Debug] Sending event via proxy')
   console.log('[Sentry Debug] Payload:', payload)
 
   // Sentry Envelope format: header line + event line
@@ -140,11 +137,11 @@ async function sendEvent(payload: SentryEvent) {
   const envelope = `${envelopeHeader}\n${itemHeader}\n${eventBody}`
 
   try {
-    const response = await fetch(endpoint, {
+    // Use our Next.js API proxy to avoid CORS issues
+    const response = await fetch('/api/sentry-proxy', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-sentry-envelope',
-        'X-Sentry-Auth': authHeader,
       },
       body: envelope,
       keepalive: true,
@@ -160,7 +157,6 @@ async function sendEvent(payload: SentryEvent) {
     }
   } catch (transportError) {
     console.error('Failed to send Sentry client event', transportError)
-    console.error('[Sentry Debug] Endpoint was:', endpoint)
   }
 }
 
