@@ -43,6 +43,8 @@ const ShareCardsDialog = ({
     status,
     error,
     lastFilename,
+    lastExportFormat,
+    canCopyToClipboard,
     reset,
   } = useShareCardExport()
 
@@ -145,11 +147,20 @@ const ShareCardsDialog = ({
   }, [open, reset])
 
   const successMessage = useMemo(() => {
-    if (status !== "success" || !lastFilename) {
+    if (status !== "success") {
       return null
     }
-    return `Downloaded ${lastFilename}.`
-  }, [status, lastFilename])
+
+    if (lastExportFormat === "clipboard") {
+      return "Copied card to clipboard."
+    }
+
+    if (lastFilename) {
+      return `Downloaded ${lastFilename}.`
+    }
+
+    return "Exported card successfully."
+  }, [status, lastExportFormat, lastFilename])
 
   if (!open) {
     return null
@@ -167,6 +178,20 @@ const ShareCardsDialog = ({
       node: tracksCardRef.current,
       filename: `audiograph-top-tracks-${activeTimeframeKey}`,
       format,
+    })
+
+  const handleCopyArtists = () =>
+    exportCard({
+      node: artistsCardRef.current,
+      filename: `audiograph-top-artists-${activeTimeframeKey}`,
+      format: "clipboard",
+    })
+
+  const handleCopyTracks = () =>
+    exportCard({
+      node: tracksCardRef.current,
+      filename: `audiograph-top-tracks-${activeTimeframeKey}`,
+      format: "clipboard",
     })
 
   return createPortal(
@@ -228,6 +253,19 @@ const ShareCardsDialog = ({
               >
                 Download artists SVG
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCopyArtists}
+                disabled={isExporting || !canCopyToClipboard}
+                title={
+                  !canCopyToClipboard
+                    ? "Copying cards requires clipboard permissions"
+                    : undefined
+                }
+              >
+                Copy artists card
+              </Button>
             </div>
           </div>
           <div className="flex flex-col gap-4">
@@ -251,6 +289,19 @@ const ShareCardsDialog = ({
                 disabled={isExporting}
               >
                 Download tracks SVG
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCopyTracks}
+                disabled={isExporting || !canCopyToClipboard}
+                title={
+                  !canCopyToClipboard
+                    ? "Copying cards requires clipboard permissions"
+                    : undefined
+                }
+              >
+                Copy tracks card
               </Button>
             </div>
           </div>
