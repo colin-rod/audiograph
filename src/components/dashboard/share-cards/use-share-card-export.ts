@@ -2,12 +2,14 @@
 
 import { useCallback, useMemo, useState } from "react"
 
-type ExportFormat = "png" | "svg" | "clipboard"
+type ExportFormat = "png" | "svg" | "clipboard" | "share"
 
 type ExportArgs = {
   node: HTMLElement | null
   filename: string
   format: ExportFormat
+  shareText?: string
+  shareTitle?: string
 }
 
 type ExportStatus = "idle" | "success" | "error"
@@ -20,6 +22,7 @@ type UseShareCardExportResult = {
   lastFilename: string | null
   lastExportFormat: ExportFormat | null
   canCopyToClipboard: boolean
+  canShare: boolean
   reset: () => void
 }
 
@@ -64,6 +67,8 @@ const normalizeFilename = (filename: string, extension: string) => {
 const EXPORT_ERROR_MESSAGE = "We couldn't export the card. Please try again."
 const CLIPBOARD_UNSUPPORTED_MESSAGE =
   "Copying to the clipboard is not supported in this browser."
+const SHARE_UNSUPPORTED_MESSAGE =
+  "Sharing cards is not supported in this browser."
 
 const useShareCardExport = (): UseShareCardExportResult => {
   const [isExporting, setIsExporting] = useState(false)
@@ -87,6 +92,36 @@ const useShareCardExport = (): UseShareCardExportResult => {
     return typeof ClipboardItem !== "undefined"
   }, [])
 
+  const canShare = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false
+    }
+
+    if (typeof File === "undefined") {
+      return false
+    }
+
+    const nav = navigator as Navigator & {
+      share?: Navigator["share"]
+      canShare?: Navigator["canShare"]
+    }
+
+    if (typeof nav.share !== "function") {
+      return false
+    }
+
+    if (typeof nav.canShare !== "function") {
+      return true
+    }
+
+    try {
+      const probeFile = new File([""], "probe.png", { type: "image/png" })
+      return nav.canShare({ files: [probeFile] })
+    } catch {
+      return false
+    }
+  }, [])
+
   const reset = useCallback(() => {
     setStatus("idle")
     setError(null)
@@ -95,7 +130,7 @@ const useShareCardExport = (): UseShareCardExportResult => {
   }, [])
 
   const exportCard = useCallback<UseShareCardExportResult["exportCard"]>(
-    async ({ node, filename, format }) => {
+    async ({ node, filename, format, shareText, shareTitle }) => {
       if (!node) {
         const missingNodeError = new Error("Card node is not available for export")
         setStatus("error")
@@ -114,6 +149,15 @@ const useShareCardExport = (): UseShareCardExportResult => {
         setLastFilename(null)
         setLastExportFormat(null)
         return Promise.reject(unsupportedClipboardError)
+      }
+
+      if (format === "share" && !canShare) {
+        const unsupportedShareError = new Error(SHARE_UNSUPPORTED_MESSAGE)
+        setStatus("error")
+        setError(unsupportedShareError.message)
+        setLastFilename(null)
+        setLastExportFormat(null)
+        return Promise.reject(unsupportedShareError)
       }
 
       setIsExporting(true)
@@ -148,6 +192,45 @@ const useShareCardExport = (): UseShareCardExportResult => {
           }
           setLastFilename(finalName)
           setLastExportFormat("svg")
+        } else if (format === "share") {
+          if (typeof navigator === "undefined") {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          const finalName = normalizeFilename(filename, "png")
+          const dataUrl = await toPng(node, {
+            cacheBust: true,
+            pixelRatio: 2,
+            quality: 0.95,
+          })
+          const response = await fetch(dataUrl)
+          const blob = await response.blob()
+          let file: File
+
+          try {
+            file = new File([blob], finalName, { type: "image/png" })
+          } catch (caughtError) {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          const nav = navigator as Navigator & {
+            share: (data: ShareData) => Promise<void>
+            canShare?: (data: ShareData) => boolean
+          }
+
+          const shareData: ShareData = {
+            files: [file],
+            ...(shareText ? { text: shareText } : {}),
+            ...(shareTitle ? { title: shareTitle } : {}),
+          }
+
+          if (typeof nav.canShare === "function" && !nav.canShare(shareData)) {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          await nav.share(shareData)
+          setLastFilename(finalName)
+          setLastExportFormat("share")
         } else {
           const dataUrl = await toPng(node, {
             cacheBust: true,
@@ -179,7 +262,7 @@ const useShareCardExport = (): UseShareCardExportResult => {
         setIsExporting(false)
       }
     },
-    [canCopyToClipboard]
+    [canCopyToClipboard, canShare]
   )
 
   return {
@@ -190,6 +273,7 @@ const useShareCardExport = (): UseShareCardExportResult => {
     lastFilename,
     lastExportFormat,
     canCopyToClipboard,
+    canShare,
     reset,
   }
 }
