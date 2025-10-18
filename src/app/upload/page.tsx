@@ -409,39 +409,90 @@ export default function UploadPage() {
     setStatus({ state: 'uploading', message: `Uploading ${validFiles.length} file${validFiles.length === 1 ? '' : 's'}...` })
 
     try {
-      const formData = new FormData()
-      validFiles.forEach(sf => {
-        formData.append('files', sf.file)
-      })
-
-      const response = await fetch('/api/uploads/json', {
+      // Step 1: Create upload job to get job ID
+      const createJobResponse = await fetch('/api/uploads/json/create', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileCount: validFiles.length,
+          filename: validFiles.length === 1 ? validFiles[0].file.name : `${validFiles.length} JSON files`,
+        }),
       })
 
-      // Check content type before parsing
-      const contentType = response.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text()
-        console.error('[Upload] Non-JSON response:', text.substring(0, 500))
-        throw new Error(`Server error: ${response.status} ${response.statusText}. The server returned HTML instead of JSON. Check server logs.`)
+      if (!createJobResponse.ok) {
+        const error = await createJobResponse.json()
+        throw new Error(error.error || 'Failed to create upload job')
       }
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to upload files')
+      const { uploadJobId, userId } = await createJobResponse.json()
+
+      // Step 2: Upload files directly to Supabase Storage
+      const uploadedFiles: Array<{ filename: string; filePath: string; fileIndex: number }> = []
+      const uploadErrors: string[] = []
+
+      for (let i = 0; i < validFiles.length; i++) {
+        const sf = validFiles[i]
+        const filePath = `${userId}/${uploadJobId}/${sf.file.name}`
+
+        try {
+          const { error: uploadError } = await supabase.storage
+            .from('file-uploads')
+            .upload(filePath, sf.file, {
+              contentType: 'application/json',
+              upsert: false,
+            })
+
+          if (uploadError) {
+            console.error(`[Upload] Failed to upload ${sf.file.name}:`, uploadError)
+            uploadErrors.push(`${sf.file.name}: ${uploadError.message}`)
+            continue
+          }
+
+          uploadedFiles.push({
+            filename: sf.file.name,
+            filePath: filePath,
+            fileIndex: i,
+          })
+        } catch (error) {
+          console.error(`[Upload] Failed to upload ${sf.file.name}:`, error)
+          uploadErrors.push(`${sf.file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
       }
 
-      const result = await response.json()
-      setUploadJobId(result.uploadJobId)
+      if (uploadedFiles.length === 0) {
+        throw new Error('All file uploads failed. ' + uploadErrors.join(', '))
+      }
+
+      // Step 3: Queue processing jobs
+      const queueResponse = await fetch('/api/uploads/json/queue', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uploadJobId,
+          files: uploadedFiles,
+          totalFiles: validFiles.length,
+        }),
+      })
+
+      if (!queueResponse.ok) {
+        const error = await queueResponse.json()
+        throw new Error(error.error || 'Failed to queue files for processing')
+      }
+
+      const result = await queueResponse.json()
+      setUploadJobId(uploadJobId)
       setStatus({
         state: 'processing',
         message: result.message,
       })
 
       // Show warnings if any files were skipped
-      if (result.skippedFiles > 0 && result.errors) {
-        console.warn('Some files were skipped:', result.errors)
+      if (uploadErrors.length > 0) {
+        console.warn('Some files failed to upload:', uploadErrors)
       }
     } catch (error) {
       console.error('Upload error:', error)
