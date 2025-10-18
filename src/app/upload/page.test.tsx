@@ -54,14 +54,14 @@ describe("UploadPage reset controls", () => {
 
     render(<UploadPage />);
 
-    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i });
+    const resetButton = screen.getByRole("button", { name: /delete all data/i });
     await user.click(resetButton);
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Delete uploaded listens?",
+      name: "Delete all uploaded data?",
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete All Data" }));
 
     await waitFor(() => expect(fromMock).toHaveBeenCalledWith("listens"));
     expect(deleteMock).toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe("UploadPage reset controls", () => {
     );
 
     await waitFor(() =>
-      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull(),
+      expect(screen.queryByRole("alertdialog", { name: "Delete all uploaded data?" })).toBeNull(),
     );
   });
 
@@ -81,11 +81,11 @@ describe("UploadPage reset controls", () => {
 
     render(<UploadPage />);
 
-    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i });
+    const resetButton = screen.getByRole("button", { name: /delete all data/i });
     await user.click(resetButton);
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Delete uploaded listens?",
+      name: "Delete all uploaded data?",
     });
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -94,11 +94,11 @@ describe("UploadPage reset controls", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     expect(eqMock).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Select a Spotify listening history file or ZIP archive to begin."),
+      screen.getByText("Need to start over? Delete all uploaded listens and upload fresh data."),
     ).toBeInTheDocument();
 
     await waitFor(() =>
-      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull(),
+      expect(screen.queryByRole("alertdialog", { name: "Delete all uploaded data?" })).toBeNull(),
     );
   });
 
@@ -108,14 +108,14 @@ describe("UploadPage reset controls", () => {
 
     render(<UploadPage />);
 
-    const resetButton = screen.getByRole("button", { name: /reset uploaded data/i });
+    const resetButton = screen.getByRole("button", { name: /delete all data/i });
     await user.click(resetButton);
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Delete uploaded listens?",
+      name: "Delete all uploaded data?",
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete All Data" }));
 
     await waitFor(() => expect(eqMock).toHaveBeenCalled());
 
@@ -126,7 +126,7 @@ describe("UploadPage reset controls", () => {
     );
 
     await waitFor(() =>
-      expect(screen.queryByRole("alertdialog", { name: "Delete uploaded listens?" })).toBeNull(),
+      expect(screen.queryByRole("alertdialog", { name: "Delete all uploaded data?" })).toBeNull(),
     );
   });
 
@@ -143,7 +143,7 @@ describe("UploadPage reset controls", () => {
       ),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: /choose file/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /reset uploaded data/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /choose files/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /delete all data/i })).toBeDisabled();
   });
 });
