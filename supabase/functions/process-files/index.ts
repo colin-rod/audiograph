@@ -22,17 +22,9 @@ interface ListenInsert {
   user_id: string
   ts: string
   ms_played: number | null
-  artist_name: string | null
-  track_name: string | null
-  album_name: string | null
-  reason_start: string | null
-  reason_end: string | null
-  shuffle: boolean | null
-  skipped: boolean | null
-  offline: boolean | null
-  spotify_track_uri: string | null
-  spotify_episode_uri: string | null
-  incognito_mode: boolean | null
+  artist: string | null
+  track: string | null
+  source?: string
 }
 
 interface SpotifyRawItem {
@@ -44,21 +36,6 @@ interface SpotifyRawItem {
   artistName?: string
   master_metadata_track_name?: string
   trackName?: string
-  master_metadata_album_album_name?: string
-  albumName?: string
-  reason_start?: string
-  reasonStart?: string
-  reason_end?: string
-  reasonEnd?: string
-  shuffle?: boolean
-  skipped?: boolean
-  offline?: boolean
-  spotify_track_uri?: string
-  trackUri?: string
-  spotify_episode_uri?: string
-  episodeUri?: string
-  incognito_mode?: boolean
-  incognitoMode?: boolean
 }
 
 /**
@@ -80,17 +57,9 @@ function parseAndMapJson(content: string, userId: string): { success: true; reco
       user_id: userId,
       ts: item.ts || item.endTime || '',
       ms_played: item.ms_played ?? item.msPlayed ?? null,
-      artist_name: item.master_metadata_album_artist_name ?? item.artistName ?? null,
-      track_name: item.master_metadata_track_name ?? item.trackName ?? null,
-      album_name: item.master_metadata_album_album_name ?? item.albumName ?? null,
-      reason_start: item.reason_start ?? item.reasonStart ?? null,
-      reason_end: item.reason_end ?? item.reasonEnd ?? null,
-      shuffle: item.shuffle ?? null,
-      skipped: item.skipped ?? null,
-      offline: item.offline ?? null,
-      spotify_track_uri: item.spotify_track_uri ?? item.trackUri ?? null,
-      spotify_episode_uri: item.spotify_episode_uri ?? item.episodeUri ?? null,
-      incognito_mode: item.incognito_mode ?? item.incognitoMode ?? null,
+      artist: item.master_metadata_album_artist_name ?? item.artistName ?? null,
+      track: item.master_metadata_track_name ?? item.trackName ?? null,
+      source: 'json',
     }))
 
     return { success: true, records }
