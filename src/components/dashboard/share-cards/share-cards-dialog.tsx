@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useMemo, useRef } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import type { TopArtistDatum } from "../top-artists-chart"
 import type { TopTrackDatum } from "../top-tracks-table"
 import { TopArtistsShareCard } from "./top-artists-share-card"
+import { ShareCardTheme } from "./share-card-theme"
 import { TopTracksShareCard } from "./top-tracks-share-card"
 import { useShareCardExport } from "./use-share-card-export"
 
@@ -35,6 +36,7 @@ const ShareCardsDialog = ({
   const previousFocusRef = useRef<Element | null>(null)
   const artistsCardRef = useRef<HTMLDivElement | null>(null)
   const tracksCardRef = useRef<HTMLDivElement | null>(null)
+  const [shareCardTheme, setShareCardTheme] = useState<ShareCardTheme>("light")
   const titleId = useId()
   const descriptionId = useId()
   const {
@@ -44,7 +46,9 @@ const ShareCardsDialog = ({
     error,
     lastFilename,
     lastExportFormat,
+    lastContextLabel,
     canCopyToClipboard,
+    canShare,
     reset,
   } = useShareCardExport()
 
@@ -151,16 +155,30 @@ const ShareCardsDialog = ({
       return null
     }
 
+    const formattedContextLabel = lastContextLabel
+      ? `${lastContextLabel.charAt(0).toUpperCase()}${lastContextLabel.slice(1)}`
+      : null
+    const themeSuffix = formattedContextLabel
+      ? ` (${formattedContextLabel} theme)`
+      : ""
+
     if (lastExportFormat === "clipboard") {
-      return "Copied card to clipboard."
+      return `Copied card to clipboard${themeSuffix}.`
+    }
+
+    if (lastExportFormat === "share") {
+      if (lastFilename) {
+        return `Shared ${lastFilename}${themeSuffix}.`
+      }
+      return `Shared card via share sheet${themeSuffix}.`
     }
 
     if (lastFilename) {
-      return `Downloaded ${lastFilename}.`
+      return `Downloaded ${lastFilename}${themeSuffix}.`
     }
 
-    return "Exported card successfully."
-  }, [status, lastExportFormat, lastFilename])
+    return `Exported card successfully${themeSuffix}.`
+  }, [status, lastExportFormat, lastFilename, lastContextLabel])
 
   if (!open) {
     return null
@@ -169,29 +187,53 @@ const ShareCardsDialog = ({
   const handleDownloadArtists = (format: "png" | "svg") =>
     exportCard({
       node: artistsCardRef.current,
-      filename: `audiograph-top-artists-${activeTimeframeKey}`,
+      filename: `audiograph-top-artists-${activeTimeframeKey}-${shareCardTheme}`,
       format,
+      contextLabel: shareCardTheme,
     })
 
   const handleDownloadTracks = (format: "png" | "svg") =>
     exportCard({
       node: tracksCardRef.current,
-      filename: `audiograph-top-tracks-${activeTimeframeKey}`,
+      filename: `audiograph-top-tracks-${activeTimeframeKey}-${shareCardTheme}`,
       format,
+      contextLabel: shareCardTheme,
     })
 
   const handleCopyArtists = () =>
     exportCard({
       node: artistsCardRef.current,
-      filename: `audiograph-top-artists-${activeTimeframeKey}`,
+      filename: `audiograph-top-artists-${activeTimeframeKey}-${shareCardTheme}`,
       format: "clipboard",
+      contextLabel: shareCardTheme,
     })
 
   const handleCopyTracks = () =>
     exportCard({
       node: tracksCardRef.current,
-      filename: `audiograph-top-tracks-${activeTimeframeKey}`,
+      filename: `audiograph-top-tracks-${activeTimeframeKey}-${shareCardTheme}`,
       format: "clipboard",
+      contextLabel: shareCardTheme,
+    })
+
+  const handleShareArtists = () =>
+    exportCard({
+      node: artistsCardRef.current,
+      filename: `audiograph-top-artists-${activeTimeframeKey}-${shareCardTheme}`,
+      format: "share",
+      shareTitle: "Audiograph top artists",
+      shareText: `My top artists for ${timeframeLabel.toLowerCase()} on Audiograph.`,
+      contextLabel: shareCardTheme,
+    })
+
+  const handleShareTracks = () =>
+    exportCard({
+      node: tracksCardRef.current,
+      filename: `audiograph-top-tracks-${activeTimeframeKey}-${shareCardTheme}`,
+      format: "share",
+      shareTitle: "Audiograph top tracks",
+      shareText: `My top tracks for ${timeframeLabel.toLowerCase()} on Audiograph.`,
+      contextLabel: shareCardTheme,
     })
 
   return createPortal(
@@ -219,16 +261,42 @@ const ShareCardsDialog = ({
               {timeframeLabel.toLowerCase()}.
             </p>
           </div>
-          <Button
-            ref={closeButtonRef}
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Close share cards dialog"
-          >
-            <X aria-hidden className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col items-end gap-3 sm:flex-row sm:items-center">
+            <div
+              className="inline-flex rounded-full border p-1"
+              role="group"
+              aria-label="Select share card theme"
+            >
+              {(["light", "dark"] as ShareCardTheme[]).map((themeOption) => (
+                <Button
+                  key={themeOption}
+                  type="button"
+                  size="sm"
+                  variant={shareCardTheme === themeOption ? "default" : "ghost"}
+                  className={cn(
+                    "rounded-full px-4",
+                    shareCardTheme === themeOption
+                      ? "shadow-sm"
+                      : "text-muted-foreground"
+                  )}
+                  onClick={() => setShareCardTheme(themeOption)}
+                  aria-pressed={shareCardTheme === themeOption}
+                >
+                  {themeOption === "light" ? "Light" : "Dark"}
+                </Button>
+              ))}
+            </div>
+            <Button
+              ref={closeButtonRef}
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              aria-label="Close share cards dialog"
+            >
+              <X aria-hidden className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <div className="mt-8 grid gap-8 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
@@ -236,6 +304,7 @@ const ShareCardsDialog = ({
               ref={artistsCardRef}
               data={topArtists}
               timeframeLabel={timeframeLabel}
+              theme={shareCardTheme}
             />
             <div className="flex flex-wrap gap-2">
               <Button
@@ -266,6 +335,18 @@ const ShareCardsDialog = ({
               >
                 Copy artists card
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleShareArtists}
+                disabled={isExporting || !canShare}
+                aria-busy={isExporting && canShare}
+                title={
+                  !canShare ? "Sharing cards requires a compatible browser" : undefined
+                }
+              >
+                Share artists card
+              </Button>
             </div>
           </div>
           <div className="flex flex-col gap-4">
@@ -273,6 +354,7 @@ const ShareCardsDialog = ({
               ref={tracksCardRef}
               data={topTracks}
               timeframeLabel={timeframeLabel}
+              theme={shareCardTheme}
             />
             <div className="flex flex-wrap gap-2">
               <Button
@@ -302,6 +384,18 @@ const ShareCardsDialog = ({
                 }
               >
                 Copy tracks card
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleShareTracks}
+                disabled={isExporting || !canShare}
+                aria-busy={isExporting && canShare}
+                title={
+                  !canShare ? "Sharing cards requires a compatible browser" : undefined
+                }
+              >
+                Share tracks card
               </Button>
             </div>
           </div>

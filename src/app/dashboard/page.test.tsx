@@ -94,7 +94,12 @@ const {
   )
   const redirect = vi.fn()
   const exportCard = vi.fn<
-    (args: { node: HTMLElement | null; filename: string; format: "png" | "svg" }) => Promise<void>
+    (args: {
+      node: HTMLElement | null
+      filename: string
+      format: "png" | "svg" | "clipboard" | "share"
+      contextLabel?: string
+    }) => Promise<void>
   >()
   const resetExport = vi.fn()
   const useShareCardExport = vi.fn(() => ({
@@ -103,7 +108,11 @@ const {
     status: "idle" as const,
     error: null,
     lastFilename: null,
+    lastExportFormat: null,
+    lastContextLabel: null,
     reset: resetExport,
+    canCopyToClipboard: true,
+    canShare: true,
   }))
 
   return {
@@ -253,6 +262,10 @@ describe("Dashboard page", () => {
       status: "idle" as const,
       error: null,
       lastFilename: null,
+      lastExportFormat: null,
+      lastContextLabel: null,
+      canCopyToClipboard: true,
+      canShare: true,
       reset: resetShareCardExportMock,
     }))
   })
