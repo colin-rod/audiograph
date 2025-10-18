@@ -219,7 +219,7 @@ const useShareCardExport = (): UseShareCardExportResult => {
 
           try {
             file = new File([blob], finalName, { type: "image/png" })
-          } catch (caughtError) {
+          } catch (_caughtError) {
             throw new Error(SHARE_UNSUPPORTED_MESSAGE)
           }
 
