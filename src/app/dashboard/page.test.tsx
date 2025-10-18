@@ -98,6 +98,7 @@ const {
       node: HTMLElement | null
       filename: string
       format: "png" | "svg" | "clipboard" | "share"
+      contextLabel?: string
     }) => Promise<void>
   >()
   const resetExport = vi.fn()
@@ -108,6 +109,7 @@ const {
     error: null,
     lastFilename: null,
     lastExportFormat: null,
+    lastContextLabel: null,
     reset: resetExport,
     canCopyToClipboard: true,
     canShare: true,
@@ -261,6 +263,7 @@ describe("Dashboard page", () => {
       error: null,
       lastFilename: null,
       lastExportFormat: null,
+      lastContextLabel: null,
       canCopyToClipboard: true,
       canShare: true,
       reset: resetShareCardExportMock,
