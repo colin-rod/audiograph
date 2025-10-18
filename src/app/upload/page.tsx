@@ -516,6 +516,7 @@ export default function UploadPage() {
   }, [supabase])
 
   const isBusy = ['validating', 'uploading', 'processing', 'resetting'].includes(status.state)
+  const isDisabled = isBusy || !supabase
 
   return (
     <div className="container mx-auto max-w-3xl p-6">
@@ -525,7 +526,7 @@ export default function UploadPage() {
         <div className="space-y-6">
           <UploadDropzone
             onFilesAccepted={handleFilesAccepted}
-            isBusy={isBusy}
+            isBusy={isDisabled}
             selectedFiles={selectedFiles}
           />
 
@@ -533,7 +534,7 @@ export default function UploadPage() {
             <FileListDisplay
               selectedFiles={selectedFiles}
               onRemoveFile={handleRemoveFile}
-              isBusy={isBusy}
+              isBusy={isDisabled}
             />
           )}
 
@@ -541,7 +542,7 @@ export default function UploadPage() {
             <div className="flex justify-center">
               <Button
                 onClick={handleUpload}
-                disabled={isBusy}
+                disabled={isDisabled}
                 size="lg"
               >
                 Upload {validFileCount} File{validFileCount === 1 ? '' : 's'}
@@ -577,7 +578,7 @@ export default function UploadPage() {
             <Button
               variant="destructive"
               onClick={handleResetRequest}
-              disabled={isBusy}
+              disabled={isDisabled}
             >
               Delete All Data
             </Button>
