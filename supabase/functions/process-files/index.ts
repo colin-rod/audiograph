@@ -2,7 +2,7 @@
 // Processes pending file upload jobs from the file_processing_jobs table
 // Can be triggered manually or via cron job
 
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const BATCH_SIZE = 5 // Process up to 5 jobs at a time
 
