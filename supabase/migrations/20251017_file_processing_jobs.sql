@@ -41,14 +41,26 @@ CREATE TABLE IF NOT EXISTS file_processing_jobs (
 -- ============================================================================
 
 -- Index for workers to find pending jobs
-CREATE INDEX idx_file_jobs_status_created ON file_processing_jobs(status, created_at);
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_file_jobs_status_created ON file_processing_jobs(status, created_at);
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- Index for filtering by upload job
-CREATE INDEX idx_file_jobs_upload_job ON file_processing_jobs(upload_job_id);
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_file_jobs_upload_job ON file_processing_jobs(upload_job_id);
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- Index for finding stale jobs (processing for too long)
-CREATE INDEX idx_file_jobs_stale ON file_processing_jobs(status, started_at)
-  WHERE status = 'processing';
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_file_jobs_stale ON file_processing_jobs(status, started_at)
+    WHERE status = 'processing';
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -58,23 +70,35 @@ CREATE INDEX idx_file_jobs_stale ON file_processing_jobs(status, started_at)
 ALTER TABLE file_processing_jobs ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do anything (for workers)
-CREATE POLICY "Service role full access" ON file_processing_jobs
-  USING (true)
-  WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role full access" ON file_processing_jobs
+    USING (true)
+    WITH CHECK (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- Users can view their own jobs
-CREATE POLICY "Users can view own jobs" ON file_processing_jobs
-  FOR SELECT USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own jobs" ON file_processing_jobs
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
 
 -- Update updated_at timestamp
-CREATE TRIGGER update_file_jobs_updated_at
-  BEFORE UPDATE ON file_processing_jobs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$ BEGIN
+  CREATE TRIGGER update_file_jobs_updated_at
+    BEFORE UPDATE ON file_processing_jobs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- FUNCTIONS FOR WORKER POLLING
