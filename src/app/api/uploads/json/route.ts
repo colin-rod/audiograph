@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
         JSON.parse(content)
 
         validFiles.push({ file, content })
-      } catch (parseError) {
+      } catch {
         errors.push(`${file.name}: Invalid JSON format`)
         continue
       }
@@ -148,18 +148,58 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API] Created upload job: ${uploadJob.id}`)
 
-    // Create file processing jobs (using database polling instead of pg-boss)
-    console.log('[API] Creating file processing jobs...')
-    const fileJobs = validFiles.map((sf, i) => ({
-      upload_job_id: uploadJob.id,
-      user_id: user.id,
-      filename: sf.file.name,
-      file_content: sf.content,
-      file_index: i,
-      total_files: validFiles.length,
-      status: 'pending' as const
-    }))
+    // Upload files to Supabase Storage
+    console.log('[API] Uploading files to Supabase Storage...')
+    const fileJobs = []
+    const uploadErrors: string[] = []
 
+    for (let i = 0; i < validFiles.length; i++) {
+      const sf = validFiles[i]
+      const filePath = `${user.id}/${uploadJob.id}/${sf.file.name}`
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('file-uploads')
+        .upload(filePath, sf.content, {
+          contentType: 'application/json',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error(`[API] Failed to upload ${sf.file.name}:`, uploadError)
+        uploadErrors.push(`${sf.file.name}: ${uploadError.message}`)
+        continue
+      }
+
+      fileJobs.push({
+        upload_job_id: uploadJob.id,
+        user_id: user.id,
+        filename: sf.file.name,
+        file_path: filePath,
+        file_index: i,
+        total_files: validFiles.length,
+        status: 'pending' as const
+      })
+    }
+
+    if (fileJobs.length === 0) {
+      console.error('[API] All file uploads failed')
+      await supabase
+        .from('upload_jobs')
+        .update({
+          status: 'failed',
+          error_message: 'Failed to upload files to storage'
+        })
+        .eq('id', uploadJob.id)
+
+      return NextResponse.json(
+        { error: 'Failed to upload files to storage', details: uploadErrors },
+        { status: 500 }
+      )
+    }
+
+    // Create file processing jobs
+    console.log('[API] Creating file processing jobs...')
     const { error: insertError } = await supabase
       .from('file_processing_jobs')
       .insert(fileJobs)

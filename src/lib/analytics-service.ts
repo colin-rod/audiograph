@@ -873,8 +873,7 @@ const filterListensByWindow = (
 }
 
 const fetchValidListens = async (
-  supabase: SupabaseClient,
-  _params: TimeWindowParams = {}
+  supabase: SupabaseClient
 ): Promise<AnalyticsResult<ValidListen[]>> => {
   const fromFn = (supabase as { from?: SupabaseClient["from"] }).from
 

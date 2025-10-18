@@ -36,13 +36,25 @@ CREATE TABLE IF NOT EXISTS upload_jobs (
 -- ============================================================================
 
 -- Index for filtering jobs by user
-CREATE INDEX idx_upload_jobs_user_id ON upload_jobs(user_id);
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_upload_jobs_user_id ON upload_jobs(user_id);
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- Index for filtering jobs by status
-CREATE INDEX idx_upload_jobs_status ON upload_jobs(status);
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_upload_jobs_status ON upload_jobs(status);
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- Composite index for user's recent uploads
-CREATE INDEX idx_upload_jobs_user_created ON upload_jobs(user_id, created_at DESC);
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_upload_jobs_user_created ON upload_jobs(user_id, created_at DESC);
+EXCEPTION
+  WHEN duplicate_table THEN null;
+END $$;
 
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -52,16 +64,28 @@ CREATE INDEX idx_upload_jobs_user_created ON upload_jobs(user_id, created_at DES
 ALTER TABLE upload_jobs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can view their own upload jobs
-CREATE POLICY "Users can view own upload jobs" ON upload_jobs
-  FOR SELECT USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own upload jobs" ON upload_jobs
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- Policy: Users can create their own upload jobs
-CREATE POLICY "Users can create own upload jobs" ON upload_jobs
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can create own upload jobs" ON upload_jobs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- Policy: Service role can update upload jobs (for background workers)
-CREATE POLICY "Service role can update upload jobs" ON upload_jobs
-  FOR UPDATE USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can update upload jobs" ON upload_jobs
+    FOR UPDATE USING (true);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- TRIGGER FOR UPDATED_AT
@@ -77,10 +101,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to update updated_at on upload_jobs
-CREATE TRIGGER update_upload_jobs_updated_at
-  BEFORE UPDATE ON upload_jobs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$ BEGIN
+  CREATE TRIGGER update_upload_jobs_updated_at
+    BEFORE UPDATE ON upload_jobs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- COMMENTS FOR DOCUMENTATION

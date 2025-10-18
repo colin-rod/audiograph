@@ -165,14 +165,14 @@ const useShareCardExport = (): UseShareCardExportResult => {
         }
 
         setStatus("success")
-      } catch (caughtError) {
-        console.error(caughtError)
+      } catch (error) {
+        console.error(error)
         setStatus("error")
         setLastFilename(null)
         setLastExportFormat(null)
         setError(
-          caughtError instanceof Error && caughtError.message
-            ? caughtError.message
+          error instanceof Error && error.message
+            ? error.message
             : EXPORT_ERROR_MESSAGE
         )
       } finally {

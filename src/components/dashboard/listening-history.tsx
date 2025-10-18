@@ -186,7 +186,6 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid, isAuthReady])
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)

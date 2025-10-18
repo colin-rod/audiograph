@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapSpotifyEntry, parseAndMapJson, type SpotifyHistoryEntry, type ListenInsert } from './spotify-mapper'
+import { mapSpotifyEntry, parseAndMapJson, type SpotifyHistoryEntry } from './spotify-mapper'
 
 describe('mapSpotifyEntry', () => {
   const userId = 'test-user-123'

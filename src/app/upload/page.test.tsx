@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UploadPage from "./page";
 
-const { createSupabaseClientMock, fromMock, deleteMock, eqMock, useRouterMock, pushMock } = vi.hoisted(() => {
+const { createSupabaseClientMock, fromMock, deleteMock, eqMock, useRouterMock } = vi.hoisted(() => {
   const localEqMock = vi.fn();
   const localDeleteMock = vi.fn(() => ({ eq: localEqMock }));
   const localFromMock = vi.fn(() => ({ delete: localDeleteMock }));

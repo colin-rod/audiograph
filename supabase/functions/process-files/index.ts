@@ -11,7 +11,7 @@ interface FileJob {
   upload_job_id: string
   user_id: string
   filename: string
-  file_content: string
+  file_path: string
   file_index: number
   total_files: number
   retry_count: number
@@ -35,6 +35,32 @@ interface ListenInsert {
   incognito_mode: boolean | null
 }
 
+interface SpotifyRawItem {
+  ts?: string
+  endTime?: string
+  ms_played?: number
+  msPlayed?: number
+  master_metadata_album_artist_name?: string
+  artistName?: string
+  master_metadata_track_name?: string
+  trackName?: string
+  master_metadata_album_album_name?: string
+  albumName?: string
+  reason_start?: string
+  reasonStart?: string
+  reason_end?: string
+  reasonEnd?: string
+  shuffle?: boolean
+  skipped?: boolean
+  offline?: boolean
+  spotify_track_uri?: string
+  trackUri?: string
+  spotify_episode_uri?: string
+  episodeUri?: string
+  incognito_mode?: boolean
+  incognitoMode?: boolean
+}
+
 /**
  * Parse and map Spotify JSON to database format
  */
@@ -50,9 +76,9 @@ function parseAndMapJson(content: string, userId: string): { success: true; reco
       return { success: false, error: 'JSON array is empty' }
     }
 
-    const records: ListenInsert[] = data.map((item: any) => ({
+    const records: ListenInsert[] = data.map((item: SpotifyRawItem) => ({
       user_id: userId,
-      ts: item.ts || item.endTime,
+      ts: item.ts || item.endTime || '',
       ms_played: item.ms_played ?? item.msPlayed ?? null,
       artist_name: item.master_metadata_album_artist_name ?? item.artistName ?? null,
       track_name: item.master_metadata_track_name ?? item.trackName ?? null,
@@ -83,8 +109,23 @@ async function processFileJob(
   console.log(`[Job ${job.id}] Processing ${job.filename} (${job.file_index + 1}/${job.total_files})`)
 
   try {
+    // Download file from Storage
+    console.log(`[Job ${job.id}] Downloading file from storage: ${job.file_path}`)
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('file-uploads')
+      .download(job.file_path)
+
+    if (downloadError || !fileData) {
+      console.error(`[Job ${job.id}] Download error:`, downloadError)
+      return { success: false, error: `Failed to download file: ${downloadError?.message || 'Unknown error'}` }
+    }
+
+    // Convert blob to text
+    const fileContent = await fileData.text()
+    console.log(`[Job ${job.id}] Downloaded ${fileContent.length} bytes`)
+
     // Parse JSON
-    const parseResult = parseAndMapJson(job.file_content, job.user_id)
+    const parseResult = parseAndMapJson(fileContent, job.user_id)
 
     if (!parseResult.success) {
       console.error(`[Job ${job.id}] Parse error:`, parseResult.error)
@@ -154,6 +195,17 @@ async function processFileJob(
       } else {
         console.log(`[Job ${job.id}] Analytics views refreshed`)
       }
+    }
+
+    // Delete file from storage after successful processing
+    console.log(`[Job ${job.id}] Cleaning up storage file: ${job.file_path}`)
+    const { error: deleteError } = await supabase.storage
+      .from('file-uploads')
+      .remove([job.file_path])
+
+    if (deleteError) {
+      console.error(`[Job ${job.id}] Failed to delete file from storage:`, deleteError)
+      // Don't fail - file can be cleaned up later
     }
 
     console.log(`[Job ${job.id}] Completed successfully`)

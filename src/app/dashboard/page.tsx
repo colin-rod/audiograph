@@ -103,10 +103,14 @@ export default function DashboardPage() {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const supabase = useMemo(() => createSupabaseClient(), [])
 
-  const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-  })
+  const MONTH_LABEL_FORMATTER = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        year: "numeric",
+      }),
+    []
+  )
 
   // Fetch available timeframes on mount
   useEffect(() => {
@@ -149,7 +153,7 @@ export default function DashboardPage() {
 
       const monthOptions: TimeframeMonthOption[] = Array.from(monthMap.entries())
         .sort(([a], [b]) => b.localeCompare(a))
-        .map(([key, { year, month }]) => {
+        .map(([, { year, month }]) => {
           const date = new Date(Date.UTC(year, month - 1, 1))
           return {
             type: "month" as const,
@@ -168,7 +172,7 @@ export default function DashboardPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [MONTH_LABEL_FORMATTER])
 
   const activeTimeframe = useMemo(
     () => timeframeOptions.find((option) => option.value === selectedTimeframe),
