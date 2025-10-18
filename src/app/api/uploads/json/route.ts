@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
-import { QueueClient } from '@/lib/queue/client'
-import type { ProcessJsonFileJobData } from '@/lib/queue/processor'
 
 /**
  * Patterns to identify Spotify JSON files
@@ -30,17 +28,21 @@ function isSpotifyFile(filename: string): boolean {
  * Accepts single or multiple JSON file uploads and queues processing jobs
  */
 export async function POST(request: NextRequest) {
+  console.log('[API] JSON upload request received')
   try {
     // Check authentication
     const supabase = createRouteHandlerClient({ cookies })
+    console.log('[API] Getting authenticated user...')
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.error('[API] Authentication failed:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[API] User authenticated:', user.id)
 
     // Parse form data
     const formData = await request.formData()
@@ -146,28 +148,40 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API] Created upload job: ${uploadJob.id}`)
 
-    // Queue processing jobs for each JSON file
-    const boss = await QueueClient.getInstance()
+    // Create file processing jobs (using database polling instead of pg-boss)
+    console.log('[API] Creating file processing jobs...')
+    const fileJobs = validFiles.map((sf, i) => ({
+      upload_job_id: uploadJob.id,
+      user_id: user.id,
+      filename: sf.file.name,
+      file_content: sf.content,
+      file_index: i,
+      total_files: validFiles.length,
+      status: 'pending' as const
+    }))
 
-    for (let i = 0; i < validFiles.length; i++) {
-      const { file, content } = validFiles[i]
-      const jobData: ProcessJsonFileJobData = {
-        uploadJobId: uploadJob.id,
-        userId: user.id,
-        filename: file.name,
-        content,
-        fileIndex: i,
-        totalFiles: validFiles.length,
-      }
+    const { error: insertError } = await supabase
+      .from('file_processing_jobs')
+      .insert(fileJobs)
 
-      await boss.send('process-json-file', jobData, {
-        retryLimit: 3,
-        retryDelay: 1000,
-        retryBackoff: true,
-      })
+    if (insertError) {
+      console.error('[API] Failed to create file processing jobs:', insertError)
+      // Update upload job status to failed
+      await supabase
+        .from('upload_jobs')
+        .update({
+          status: 'failed',
+          error_message: 'Failed to queue files for processing'
+        })
+        .eq('id', uploadJob.id)
 
-      console.log(`[API] Queued job for file ${i + 1}/${validFiles.length}: ${file.name}`)
+      return NextResponse.json(
+        { error: 'Failed to queue files for processing' },
+        { status: 500 }
+      )
     }
+
+    console.log(`[API] Created ${fileJobs.length} file processing jobs`)
 
     // Update job status to processing
     await supabase

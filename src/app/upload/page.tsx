@@ -419,6 +419,14 @@ export default function UploadPage() {
         body: formData,
       })
 
+      // Check content type before parsing
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('[Upload] Non-JSON response:', text.substring(0, 500))
+        throw new Error(`Server error: ${response.status} ${response.statusText}. The server returned HTML instead of JSON. Check server logs.`)
+      }
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to upload files')
