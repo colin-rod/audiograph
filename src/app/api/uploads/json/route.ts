@@ -189,6 +189,27 @@ export async function POST(request: NextRequest) {
       .update({ status: 'processing' })
       .eq('id', uploadJob.id)
 
+    // Trigger Supabase Edge Function to process jobs asynchronously
+    // Don't await - let it run in background
+    const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-files`
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (edgeFunctionUrl && serviceRoleKey) {
+      console.log('[API] Triggering Edge Function to process jobs...')
+      fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json',
+        },
+      }).catch(error => {
+        console.error('[API] Failed to trigger Edge Function:', error)
+        // Don't fail the request - jobs are in DB and can be processed later
+      })
+    } else {
+      console.warn('[API] Edge Function URL or service key not configured, jobs will need manual processing')
+    }
+
     return NextResponse.json({
       uploadJobId: uploadJob.id,
       totalFiles: validFiles.length,
