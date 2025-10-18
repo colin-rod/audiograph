@@ -45,6 +45,7 @@ const ShareCardsDialog = ({
     lastFilename,
     lastExportFormat,
     canCopyToClipboard,
+    canShare,
     reset,
   } = useShareCardExport()
 
@@ -155,6 +156,13 @@ const ShareCardsDialog = ({
       return "Copied card to clipboard."
     }
 
+    if (lastExportFormat === "share") {
+      if (lastFilename) {
+        return `Shared ${lastFilename}.`
+      }
+      return "Shared card via share sheet."
+    }
+
     if (lastFilename) {
       return `Downloaded ${lastFilename}.`
     }
@@ -192,6 +200,24 @@ const ShareCardsDialog = ({
       node: tracksCardRef.current,
       filename: `audiograph-top-tracks-${activeTimeframeKey}`,
       format: "clipboard",
+    })
+
+  const handleShareArtists = () =>
+    exportCard({
+      node: artistsCardRef.current,
+      filename: `audiograph-top-artists-${activeTimeframeKey}`,
+      format: "share",
+      shareTitle: "Audiograph top artists",
+      shareText: `My top artists for ${timeframeLabel.toLowerCase()} on Audiograph.`,
+    })
+
+  const handleShareTracks = () =>
+    exportCard({
+      node: tracksCardRef.current,
+      filename: `audiograph-top-tracks-${activeTimeframeKey}`,
+      format: "share",
+      shareTitle: "Audiograph top tracks",
+      shareText: `My top tracks for ${timeframeLabel.toLowerCase()} on Audiograph.`,
     })
 
   return createPortal(
@@ -266,6 +292,18 @@ const ShareCardsDialog = ({
               >
                 Copy artists card
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleShareArtists}
+                disabled={isExporting || !canShare}
+                aria-busy={isExporting && canShare}
+                title={
+                  !canShare ? "Sharing cards requires a compatible browser" : undefined
+                }
+              >
+                Share artists card
+              </Button>
             </div>
           </div>
           <div className="flex flex-col gap-4">
@@ -302,6 +340,18 @@ const ShareCardsDialog = ({
                 }
               >
                 Copy tracks card
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleShareTracks}
+                disabled={isExporting || !canShare}
+                aria-busy={isExporting && canShare}
+                title={
+                  !canShare ? "Sharing cards requires a compatible browser" : undefined
+                }
+              >
+                Share tracks card
               </Button>
             </div>
           </div>
