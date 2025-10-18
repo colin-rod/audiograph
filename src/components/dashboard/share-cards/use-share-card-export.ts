@@ -1,8 +1,8 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
-type ExportFormat = "png" | "svg"
+type ExportFormat = "png" | "svg" | "clipboard"
 
 type ExportArgs = {
   node: HTMLElement | null
@@ -18,6 +18,8 @@ type UseShareCardExportResult = {
   status: ExportStatus
   error: string | null
   lastFilename: string | null
+  lastExportFormat: ExportFormat | null
+  canCopyToClipboard: boolean
   reset: () => void
 }
 
@@ -60,17 +62,36 @@ const normalizeFilename = (filename: string, extension: string) => {
 }
 
 const EXPORT_ERROR_MESSAGE = "We couldn't export the card. Please try again."
+const CLIPBOARD_UNSUPPORTED_MESSAGE =
+  "Copying to the clipboard is not supported in this browser."
 
 const useShareCardExport = (): UseShareCardExportResult => {
   const [isExporting, setIsExporting] = useState(false)
   const [status, setStatus] = useState<ExportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [lastFilename, setLastFilename] = useState<string | null>(null)
+  const [lastExportFormat, setLastExportFormat] =
+    useState<ExportFormat | null>(null)
+
+  const canCopyToClipboard = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false
+    }
+
+    const clipboard = navigator.clipboard
+
+    if (!clipboard || typeof clipboard.write !== "function") {
+      return false
+    }
+
+    return typeof ClipboardItem !== "undefined"
+  }, [])
 
   const reset = useCallback(() => {
     setStatus("idle")
     setError(null)
     setLastFilename(null)
+    setLastExportFormat(null)
   }, [])
 
   const exportCard = useCallback<UseShareCardExportResult["exportCard"]>(
@@ -80,12 +101,25 @@ const useShareCardExport = (): UseShareCardExportResult => {
         setStatus("error")
         setError(missingNodeError.message)
         setLastFilename(null)
+        setLastExportFormat(null)
         return Promise.reject(missingNodeError)
+      }
+
+      if (format === "clipboard" && !canCopyToClipboard) {
+        const unsupportedClipboardError = new Error(
+          CLIPBOARD_UNSUPPORTED_MESSAGE
+        )
+        setStatus("error")
+        setError(unsupportedClipboardError.message)
+        setLastFilename(null)
+        setLastExportFormat(null)
+        return Promise.reject(unsupportedClipboardError)
       }
 
       setIsExporting(true)
       setStatus("idle")
       setError(null)
+      setLastExportFormat(null)
 
       try {
         const { toPng, toSvg } = await resolveHtmlToImageModule()
@@ -99,7 +133,8 @@ const useShareCardExport = (): UseShareCardExportResult => {
           })
           triggerDownload(dataUrl, finalName)
           setLastFilename(finalName)
-        } else {
+          setLastExportFormat("png")
+        } else if (format === "svg") {
           const finalName = normalizeFilename(filename, "svg")
           const svgMarkup = await toSvg(node, { cacheBust: true })
           const blob = new Blob([svgMarkup], {
@@ -112,6 +147,21 @@ const useShareCardExport = (): UseShareCardExportResult => {
             URL.revokeObjectURL(objectUrl)
           }
           setLastFilename(finalName)
+          setLastExportFormat("svg")
+        } else {
+          const dataUrl = await toPng(node, {
+            cacheBust: true,
+            pixelRatio: 2,
+            quality: 0.95,
+          })
+          const response = await fetch(dataUrl)
+          const blob = await response.blob()
+          const clipboardItem = new ClipboardItem({
+            "image/png": blob,
+          })
+          await navigator.clipboard.write([clipboardItem])
+          setLastFilename(null)
+          setLastExportFormat("clipboard")
         }
 
         setStatus("success")
@@ -119,6 +169,7 @@ const useShareCardExport = (): UseShareCardExportResult => {
         console.error(caughtError)
         setStatus("error")
         setLastFilename(null)
+        setLastExportFormat(null)
         setError(
           caughtError instanceof Error && caughtError.message
             ? caughtError.message
@@ -128,10 +179,19 @@ const useShareCardExport = (): UseShareCardExportResult => {
         setIsExporting(false)
       }
     },
-    []
+    [canCopyToClipboard]
   )
 
-  return { exportCard, isExporting, status, error, lastFilename, reset }
+  return {
+    exportCard,
+    isExporting,
+    status,
+    error,
+    lastFilename,
+    lastExportFormat,
+    canCopyToClipboard,
+    reset,
+  }
 }
 
 export { useShareCardExport }
