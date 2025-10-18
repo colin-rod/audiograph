@@ -260,6 +260,9 @@ describe("Dashboard page", () => {
       status: "idle" as const,
       error: null,
       lastFilename: null,
+      lastExportFormat: null,
+      canCopyToClipboard: true,
+      canShare: true,
       reset: resetShareCardExportMock,
     }))
   })
