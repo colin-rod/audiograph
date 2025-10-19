@@ -17,9 +17,31 @@ const sanitiseNextPath = (value: string | null) => {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")
+  const oauthError = request.nextUrl.searchParams.get("error")
+  const errorDescription = request.nextUrl.searchParams.get("error_description")
+  const errorCode = request.nextUrl.searchParams.get("error_code")
   const nextParam = sanitiseNextPath(
     request.nextUrl.searchParams.get("next")
   )
+
+  // Handle OAuth provider errors (access_denied, etc.)
+  if (oauthError) {
+    const redirectUrl = buildRedirectUrl(request, "/sign-in")
+
+    // Handle specific error cases with user-friendly messages
+    if (errorCode === "provider_email_needs_verification") {
+      redirectUrl.searchParams.set("message", "email-verification-required")
+      redirectUrl.searchParams.set("error", "Please verify your email address with Spotify before signing in.")
+    } else if (oauthError === "access_denied") {
+      redirectUrl.searchParams.set("message", "access-denied")
+      redirectUrl.searchParams.set("error", errorDescription || "Access was denied. Please try again.")
+    } else {
+      redirectUrl.searchParams.set("message", "oauth-error")
+      redirectUrl.searchParams.set("error", errorDescription || oauthError)
+    }
+
+    return NextResponse.redirect(redirectUrl)
+  }
 
   if (!code) {
     const redirectUrl = buildRedirectUrl(request, "/sign-in")
@@ -28,12 +50,12 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createRouteHandlerClient({ cookies })
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+  const { data, error: sessionError } = await supabase.auth.exchangeCodeForSession(code)
 
-  if (error) {
+  if (sessionError) {
     const redirectUrl = buildRedirectUrl(request, "/sign-in")
     redirectUrl.searchParams.set("message", "signin-error")
-    redirectUrl.searchParams.set("error", error.message)
+    redirectUrl.searchParams.set("error", sessionError.message)
     return NextResponse.redirect(redirectUrl)
   }
 

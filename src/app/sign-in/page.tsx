@@ -23,6 +23,21 @@ const buildCallbackMessage = (message: string | null, error: string | null) => {
   }
 
   switch (message) {
+    case "email-verification-required":
+      return {
+        intent: "error" as const,
+        text: "Please verify your email address with Spotify before signing in. Check your email for a verification link from Spotify.",
+      }
+    case "access-denied":
+      return {
+        intent: "error" as const,
+        text: "Access was denied. Please grant the necessary permissions to continue.",
+      }
+    case "oauth-error":
+      return {
+        intent: "error" as const,
+        text: error || "An error occurred during sign-in. Please try again.",
+      }
     case "missing-code":
       return {
         intent: "error" as const,
