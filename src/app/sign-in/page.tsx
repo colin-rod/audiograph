@@ -164,6 +164,14 @@ const SignInContent = () => {
   }
 
   const handleOAuthSignIn = async (provider: "google" | "spotify") => {
+    // Clear any error messages from URL when starting new OAuth flow
+    if (messageParam || errorParam) {
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete("message")
+      newUrl.searchParams.delete("error")
+      window.history.replaceState({}, "", newUrl.toString())
+    }
+
     setStatus("loading")
     setStatusIntent(null)
     setStatusMessage(null)
