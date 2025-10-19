@@ -86,9 +86,10 @@ export class SpotifyAPIError extends Error {
  */
 async function getAccessToken(): Promise<string> {
   // Get token from database
-  const { data: tokenData, error: tokenError } = await supabase
-    .rpc('get_user_spotify_token')
-    .single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tokenData, error: tokenError } = await (supabase.rpc as any)(
+    'get_user_spotify_token'
+  ).single()
 
   if (tokenError) {
     throw new SpotifyAPIError('Failed to retrieve Spotify token', undefined, tokenError)
@@ -147,7 +148,8 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
   const data: TokenRefreshResponse = await response.json()
 
   // Update token in database
-  const { error: updateError } = await supabase.rpc('upsert_spotify_token', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: updateError } = await (supabase.rpc as any)('upsert_spotify_token', {
     new_access_token: data.access_token,
     new_refresh_token: data.refresh_token || refreshToken,
     expires_in_seconds: data.expires_in,

@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
     if (providerToken && providerRefreshToken) {
       // Store Spotify tokens in database
       // Default Spotify token expiry is 3600 seconds (1 hour)
-      const { error: tokenError } = await supabase.rpc('upsert_spotify_token', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: tokenError } = await (supabase.rpc as any)('upsert_spotify_token', {
         new_access_token: providerToken,
         new_refresh_token: providerRefreshToken,
         expires_in_seconds: 3600,

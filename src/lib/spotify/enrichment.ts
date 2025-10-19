@@ -149,8 +149,8 @@ async function updateListenWithEnrichment(
   listenId: number,
   enrichmentData: EnrichmentData
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('listens')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from('listens') as any)
     .update({
       ...enrichmentData,
       enriched_at: new Date().toISOString(),

@@ -38,11 +38,16 @@ export function GenreAnalytics({
         setLoading(true)
         setError(null)
 
-        const { data, error: rpcError } = await supabase.rpc("get_top_genres", {
-          start_date: startDate,
-          end_date: endDate,
-          limit_count: limit,
-        })
+        // Type assertion needed until Supabase types are generated
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: rpcError } = await (supabase.rpc as any)(
+          "get_top_genres",
+          {
+            start_date: startDate,
+            end_date: endDate,
+            limit_count: limit,
+          }
+        )
 
         if (rpcError) {
           throw rpcError
