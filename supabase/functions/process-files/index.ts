@@ -74,7 +74,7 @@ function parseAndMapJson(content: string, userId: string): { success: true; reco
 async function processFileJob(
   supabase: ReturnType<typeof createClient>,
   job: FileJob
-): Promise<{ success: boolean; error?: string; recordCount?: number }> {
+): Promise<{ success: boolean; error?: string; recordCount?: number; insertedIds?: number[] }> {
   console.log(`[Job ${job.id}] Processing ${job.filename} (${job.file_index + 1}/${job.total_files})`)
 
   try {
@@ -107,15 +107,23 @@ async function processFileJob(
     // Insert records in batches
     const BATCH_SIZE = 500
     let insertedCount = 0
+    const insertedIds: number[] = []
 
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       const batch = records.slice(i, i + BATCH_SIZE)
 
-      const { error } = await supabase.from('listens').insert(batch)
+      const { data: insertedData, error } = await supabase
+        .from('listens')
+        .insert(batch)
+        .select('id')
 
       if (error) {
         console.error(`[Job ${job.id}] Insert error:`, error)
         return { success: false, error: `Failed to insert batch: ${error.message}` }
+      }
+
+      if (insertedData) {
+        insertedIds.push(...insertedData.map((row: { id: number }) => row.id))
       }
 
       insertedCount += batch.length
@@ -164,6 +172,28 @@ async function processFileJob(
       } else {
         console.log(`[Job ${job.id}] Analytics views refreshed`)
       }
+
+      // Trigger Spotify enrichment for newly inserted records
+      console.log(`[Job ${job.id}] Triggering Spotify enrichment for ${insertedIds.length} records`)
+
+      // Call enrichment function asynchronously (don't wait for completion)
+      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/spotify-enrichment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        },
+        body: JSON.stringify({
+          user_id: job.user_id,
+          listen_ids: insertedIds,
+          batch_size: 50,
+        }),
+      }).catch(error => {
+        console.error(`[Job ${job.id}] Failed to trigger enrichment:`, error)
+        // Don't fail the upload - enrichment can be done later
+      })
+
+      console.log(`[Job ${job.id}] Enrichment triggered in background`)
     }
 
     // Delete file from storage after successful processing
@@ -178,7 +208,7 @@ async function processFileJob(
     }
 
     console.log(`[Job ${job.id}] Completed successfully`)
-    return { success: true, recordCount: insertedCount }
+    return { success: true, recordCount: insertedCount, insertedIds }
 
   } catch (error) {
     console.error(`[Job ${job.id}] Unexpected error:`, error)
