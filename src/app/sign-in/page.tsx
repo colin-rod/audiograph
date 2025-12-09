@@ -2,7 +2,7 @@
 
 import { FormEvent, Suspense, useMemo, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 export const dynamic = "force-dynamic"
 
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabaseClient"
 
 const buildCallbackMessage = (message: string | null, error: string | null) => {
@@ -60,6 +61,7 @@ const buildCallbackMessage = (message: string | null, error: string | null) => {
 
 const SignInContent = () => {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const messageParam = searchParams.get("message")
   const errorParam = searchParams.get("error")
   const nextParam = searchParams.get("next")
@@ -80,6 +82,50 @@ const SignInContent = () => {
   const [statusIntent, setStatusIntent] = useState<"success" | "error" | "info" | null>(
     initialMessage?.intent ?? null
   )
+  const [authTab, setAuthTab] = useState<"magic" | "password">("magic")
+  const [passwordMode, setPasswordMode] = useState<"sign-in" | "sign-up">(
+    "sign-in"
+  )
+  const [oauthLoading, setOauthLoading] = useState<"google" | "spotify" | null>(
+    null
+  )
+
+  const handleOAuthSignIn = async (provider: "google" | "spotify") => {
+    setOauthLoading(provider)
+    setStatus("loading")
+    setStatusIntent(null)
+    setStatusMessage(null)
+
+    try {
+      const redirectUrl = `${window.location.origin}/auth/callback`
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: redirectUrl,
+        },
+      })
+
+      if (error) {
+        setStatus("error")
+        setStatusIntent("error")
+        setStatusMessage(
+          error.message ?? "Unable to start the sign-in flow. Please try again."
+        )
+        setOauthLoading(null)
+      } else {
+        setStatus("success")
+        setStatusIntent("info")
+        setStatusMessage("Redirecting you to complete sign-in...")
+      }
+    } catch (error) {
+      setStatus("error")
+      setStatusIntent("error")
+      setStatusMessage(
+        error instanceof Error ? error.message : "Unexpected error occurred."
+      )
+      setOauthLoading(null)
+    }
+  }
 
   const handlePasswordSignIn = async () => {
     const trimmedEmail = email.trim()
@@ -137,6 +183,7 @@ const SignInContent = () => {
 
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
+        password,
         options: {
           emailRedirectTo: callbackUrl.toString(),
         },
@@ -145,16 +192,25 @@ const SignInContent = () => {
       if (error) {
         setStatus("error")
         setStatusIntent("error")
-        setStatusMessage(error.message ?? "Unable to send sign-in email.")
+        setStatusMessage(error.message ?? "Unable to create your account.")
         return
       }
 
-      setStatus("success")
-      setStatusIntent("success")
-      setStatusMessage(
-        "Check your inbox for a sign-in link. It may take a moment to arrive."
-      )
       setEmail("")
+      setPassword("")
+
+      if (data.session) {
+        setStatus("success")
+        setStatusIntent("success")
+        setStatusMessage("Account created successfully. Redirecting...")
+        router.push("/dashboard")
+      } else {
+        setStatus("success")
+        setStatusIntent("info")
+        setStatusMessage(
+          "Check your inbox to confirm your email before signing in."
+        )
+      }
     } catch (error) {
       setStatus("error")
       setStatusIntent("error")
@@ -339,10 +395,13 @@ const SignInContent = () => {
 
             <div className="space-y-2">
               <Button
-                type="submit"
-                variant="primary"
+                type="button"
+                variant="secondary"
                 className="w-full"
-                disabled={status === "loading"}
+                disabled={oauthLoading !== null || status === "loading"}
+                onClick={() => {
+                  void handleOAuthSignIn("google")
+                }}
               >
                 {status === "loading"
                   ? (authMode === "password" ? "Signing in..." : "Sending email...")
