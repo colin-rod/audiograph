@@ -7,8 +7,9 @@ const ThemeProvider = ({ children, ...props }: ComponentProps<typeof NextThemesP
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      defaultTheme="dark"
+      enableSystem={false}
+      themes={["dark", "light"]}
       disableTransitionOnChange
       suppressHydrationWarning
       {...props}
