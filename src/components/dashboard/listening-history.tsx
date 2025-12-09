@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -79,8 +79,13 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
   const [error, setError] = useState<string | null>(null)
   const [isAuthReady, setIsAuthReady] = useState(false)
 
+  console.log('[ListeningHistory] RENDER - query:', query, 'listens.length:', listens.length, 'totalCount:', totalCount)
+
   const fromDate = useMemo(() => parseDateTimeInput(fromValue), [fromValue])
   const toDate = useMemo(() => parseDateTimeInput(toValue), [toValue])
+
+  // Track previous filter values to know when to reset page
+  const prevFiltersRef = useRef({ timeframeFilter, query, fromDate, toDate })
   const isRangeInvalid = Boolean(
     fromDate && toDate && fromDate.getTime() > toDate.getTime()
   )
@@ -111,25 +116,50 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     }
   }, [])
 
-  // Fetch data when filters change
+  // Fetch data when filters or page changes
   useEffect(() => {
     let active = true
     const supabase = createSupabaseBrowserClient()
+
+    // Check if filters changed (not just page)
+    const filtersChanged =
+      prevFiltersRef.current.timeframeFilter !== timeframeFilter ||
+      prevFiltersRef.current.query !== query ||
+      prevFiltersRef.current.fromDate !== fromDate ||
+      prevFiltersRef.current.toDate !== toDate
+
+    // Determine which page to fetch
+    let pageToFetch = currentPage
+    if (filtersChanged && currentPage !== 0) {
+      // Filters changed and we're not on page 0, reset to page 0
+      pageToFetch = 0
+      setCurrentPage(0)
+    }
+
+    // Update ref for next render
+    prevFiltersRef.current = { timeframeFilter, query, fromDate, toDate }
 
     const fetchData = async () => {
       setIsLoading(true)
       setError(null)
 
       const timeParams = timeframeToParams(timeframeFilter)
-      const result = await getListeningHistory(supabase, {
+      const fetchParams = {
         search_query: query.trim() || null,
         start_date: fromDate?.toISOString() ?? timeParams.start_date,
         end_date: toDate?.toISOString() ?? timeParams.end_date,
         limit_count: PAGE_SIZE,
-        offset_count: currentPage * PAGE_SIZE,
-      })
+        offset_count: pageToFetch * PAGE_SIZE,
+      }
 
-      if (!active) return
+      console.log('[ListeningHistory] Fetching with params:', fetchParams)
+
+      const result = await getListeningHistory(supabase, fetchParams)
+
+      if (!active) {
+        console.log('[ListeningHistory] Request aborted - component unmounted or deps changed')
+        return
+      }
 
       setIsLoading(false)
 
@@ -139,6 +169,8 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
         return
       }
 
+      console.log('[ListeningHistory] Updating state with', result.data.data.length, 'listens, totalCount:', result.data.totalCount)
+      console.log('[ListeningHistory] First listen:', result.data.data[0])
       setListens(result.data.data)
       setTotalCount(result.data.totalCount)
     }
@@ -156,16 +188,12 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
     }
   }, [timeframeFilter, query, fromDate, toDate, currentPage, isRangeInvalid, isAuthReady])
 
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(0)
-  }, [timeframeFilter, query, fromDate, toDate])
-
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasNextPage = currentPage < totalPages - 1
   const hasPrevPage = currentPage > 0
 
   const displayListens = useMemo(() => {
+    console.log('[ListeningHistory] Computing displayListens - isRangeInvalid:', isRangeInvalid, 'listens.length:', listens.length)
     if (isRangeInvalid) {
       return []
     }
@@ -289,6 +317,9 @@ function ListeningHistory({ timeframeFilter, className }: ListeningHistoryProps)
             <TableBody>
               {displayListens.length ? (
                 displayListens.map((listen, index) => {
+                  if (index === 0) {
+                    console.log('[ListeningHistory] Rendering first row:', { track: listen.track, artist: listen.artist, ts: listen.ts })
+                  }
                   const timestamp = listen.ts ? new Date(listen.ts) : null
                   const formattedTimestamp =
                     timestamp && !Number.isNaN(timestamp.getTime())

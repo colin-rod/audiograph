@@ -283,7 +283,7 @@ Then visit:
 
 ## Next Steps
 
-- **Authentication:** Set up OAuth providers in Supabase Auth settings
+- **Authentication:** Set up OAuth providers (Google, Spotify) and password authentication - see [OAUTH_SETUP.md](./OAUTH_SETUP.md)
 - **Security:** Review and adjust RLS policies for your use case
 - **Monitoring:** Enable database logging in Supabase dashboard
 - **Backups:** Configure automatic backups (Settings > Database)

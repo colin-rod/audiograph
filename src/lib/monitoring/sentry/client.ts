@@ -1,8 +1,8 @@
 'use client'
 
 import {
-  createSentryAuthHeader,
-  createSentryStoreUrl,
+  // createSentryAuthHeader,
+  // createSentryStoreUrl,
   parseSentryDsn,
   type SentryDsnComponents,
 } from './shared'

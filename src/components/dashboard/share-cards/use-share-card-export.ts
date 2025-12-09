@@ -1,13 +1,16 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
-type ExportFormat = "png" | "svg"
+type ExportFormat = "png" | "svg" | "clipboard" | "share"
 
 type ExportArgs = {
   node: HTMLElement | null
   filename: string
   format: ExportFormat
+  shareText?: string
+  shareTitle?: string
+  contextLabel?: string
 }
 
 type ExportStatus = "idle" | "success" | "error"
@@ -18,6 +21,10 @@ type UseShareCardExportResult = {
   status: ExportStatus
   error: string | null
   lastFilename: string | null
+  lastExportFormat: ExportFormat | null
+  lastContextLabel: string | null
+  canCopyToClipboard: boolean
+  canShare: boolean
   reset: () => void
 }
 
@@ -60,32 +67,111 @@ const normalizeFilename = (filename: string, extension: string) => {
 }
 
 const EXPORT_ERROR_MESSAGE = "We couldn't export the card. Please try again."
+const CLIPBOARD_UNSUPPORTED_MESSAGE =
+  "Copying to the clipboard is not supported in this browser."
+const SHARE_UNSUPPORTED_MESSAGE =
+  "Sharing cards is not supported in this browser."
 
 const useShareCardExport = (): UseShareCardExportResult => {
   const [isExporting, setIsExporting] = useState(false)
   const [status, setStatus] = useState<ExportStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [lastFilename, setLastFilename] = useState<string | null>(null)
+  const [lastExportFormat, setLastExportFormat] =
+    useState<ExportFormat | null>(null)
+  const [lastContextLabel, setLastContextLabel] = useState<string | null>(null)
+
+  const canCopyToClipboard = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false
+    }
+
+    const clipboard = navigator.clipboard
+
+    if (!clipboard || typeof clipboard.write !== "function") {
+      return false
+    }
+
+    return typeof ClipboardItem !== "undefined"
+  }, [])
+
+  const canShare = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false
+    }
+
+    if (typeof File === "undefined") {
+      return false
+    }
+
+    const nav = navigator as Navigator & {
+      share?: Navigator["share"]
+      canShare?: Navigator["canShare"]
+    }
+
+    if (typeof nav.share !== "function") {
+      return false
+    }
+
+    if (typeof nav.canShare !== "function") {
+      return true
+    }
+
+    try {
+      const probeFile = new File([""], "probe.png", { type: "image/png" })
+      return nav.canShare({ files: [probeFile] })
+    } catch {
+      return false
+    }
+  }, [])
 
   const reset = useCallback(() => {
     setStatus("idle")
     setError(null)
     setLastFilename(null)
+    setLastExportFormat(null)
+    setLastContextLabel(null)
   }, [])
 
   const exportCard = useCallback<UseShareCardExportResult["exportCard"]>(
-    async ({ node, filename, format }) => {
+    async ({ node, filename, format, shareText, shareTitle, contextLabel }) => {
       if (!node) {
         const missingNodeError = new Error("Card node is not available for export")
         setStatus("error")
         setError(missingNodeError.message)
         setLastFilename(null)
+        setLastExportFormat(null)
+        setLastContextLabel(null)
         return Promise.reject(missingNodeError)
+      }
+
+      if (format === "clipboard" && !canCopyToClipboard) {
+        const unsupportedClipboardError = new Error(
+          CLIPBOARD_UNSUPPORTED_MESSAGE
+        )
+        setStatus("error")
+        setError(unsupportedClipboardError.message)
+        setLastFilename(null)
+        setLastExportFormat(null)
+        setLastContextLabel(null)
+        return Promise.reject(unsupportedClipboardError)
+      }
+
+      if (format === "share" && !canShare) {
+        const unsupportedShareError = new Error(SHARE_UNSUPPORTED_MESSAGE)
+        setStatus("error")
+        setError(unsupportedShareError.message)
+        setLastFilename(null)
+        setLastExportFormat(null)
+        setLastContextLabel(null)
+        return Promise.reject(unsupportedShareError)
       }
 
       setIsExporting(true)
       setStatus("idle")
       setError(null)
+      setLastExportFormat(null)
+      setLastContextLabel(null)
 
       try {
         const { toPng, toSvg } = await resolveHtmlToImageModule()
@@ -99,7 +185,9 @@ const useShareCardExport = (): UseShareCardExportResult => {
           })
           triggerDownload(dataUrl, finalName)
           setLastFilename(finalName)
-        } else {
+          setLastExportFormat("png")
+          setLastContextLabel(contextLabel ?? null)
+        } else if (format === "svg") {
           const finalName = normalizeFilename(filename, "svg")
           const svgMarkup = await toSvg(node, { cacheBust: true })
           const blob = new Blob([svgMarkup], {
@@ -112,26 +200,96 @@ const useShareCardExport = (): UseShareCardExportResult => {
             URL.revokeObjectURL(objectUrl)
           }
           setLastFilename(finalName)
+          setLastExportFormat("svg")
+          setLastContextLabel(contextLabel ?? null)
+        } else if (format === "share") {
+          if (typeof navigator === "undefined") {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          const finalName = normalizeFilename(filename, "png")
+          const dataUrl = await toPng(node, {
+            cacheBust: true,
+            pixelRatio: 2,
+            quality: 0.95,
+          })
+          const response = await fetch(dataUrl)
+          const blob = await response.blob()
+          let file: File
+
+          try {
+            file = new File([blob], finalName, { type: "image/png" })
+          } catch (_caughtError) {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          const nav = navigator as Navigator & {
+            share: (data: ShareData) => Promise<void>
+            canShare?: (data: ShareData) => boolean
+          }
+
+          const shareData: ShareData = {
+            files: [file],
+            ...(shareText ? { text: shareText } : {}),
+            ...(shareTitle ? { title: shareTitle } : {}),
+          }
+
+          if (typeof nav.canShare === "function" && !nav.canShare(shareData)) {
+            throw new Error(SHARE_UNSUPPORTED_MESSAGE)
+          }
+
+          await nav.share(shareData)
+          setLastFilename(finalName)
+          setLastExportFormat("share")
+          setLastContextLabel(contextLabel ?? null)
+        } else {
+          const dataUrl = await toPng(node, {
+            cacheBust: true,
+            pixelRatio: 2,
+            quality: 0.95,
+          })
+          const response = await fetch(dataUrl)
+          const blob = await response.blob()
+          const clipboardItem = new ClipboardItem({
+            "image/png": blob,
+          })
+          await navigator.clipboard.write([clipboardItem])
+          setLastFilename(filename)
+          setLastExportFormat("clipboard")
+          setLastContextLabel(contextLabel ?? null)
         }
 
         setStatus("success")
-      } catch (caughtError) {
-        console.error(caughtError)
+      } catch (error) {
+        console.error(error)
         setStatus("error")
         setLastFilename(null)
+        setLastExportFormat(null)
+        setLastContextLabel(null)
         setError(
-          caughtError instanceof Error && caughtError.message
-            ? caughtError.message
+          error instanceof Error && error.message
+            ? error.message
             : EXPORT_ERROR_MESSAGE
         )
       } finally {
         setIsExporting(false)
       }
     },
-    []
+    [canCopyToClipboard, canShare]
   )
 
-  return { exportCard, isExporting, status, error, lastFilename, reset }
+  return {
+    exportCard,
+    isExporting,
+    status,
+    error,
+    lastFilename,
+    lastExportFormat,
+    lastContextLabel,
+    canCopyToClipboard,
+    canShare,
+    reset,
+  }
 }
 
 export { useShareCardExport }

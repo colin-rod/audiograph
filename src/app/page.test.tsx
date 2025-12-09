@@ -1,11 +1,21 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import LandingPage from "./page";
 
+// Mock the Supabase server client
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: () => ({
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    },
+  }),
+}));
+
 describe("LandingPage", () => {
-  it("highlights the hero copy, calls to action, privacy info, and screenshots", () => {
-    render(<LandingPage />);
+  it("highlights the hero copy, calls to action, privacy info, and screenshots", async () => {
+    const component = await LandingPage();
+    render(component);
 
     expect(
       screen.getByRole("heading", {
@@ -14,7 +24,8 @@ describe("LandingPage", () => {
     ).toBeInTheDocument();
 
     const uploadLink = screen.getByRole("link", { name: /upload your history/i });
-    expect(uploadLink).toHaveAttribute("href", "/upload");
+    // When not authenticated, should redirect to sign-in with next param
+    expect(uploadLink).toHaveAttribute("href", "/sign-in?next=/upload");
 
     expect(screen.getByText(/your privacy stays center stage/i)).toBeInTheDocument();
     expect(

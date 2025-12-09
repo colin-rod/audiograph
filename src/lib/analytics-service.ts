@@ -440,7 +440,7 @@ export async function getDiscoveryTracker(
       success: true,
       data: transformed,
     }
-  } catch (error) {
+  } catch {
     return getDiscoveryTrackerFallback(supabase, params)
   }
 }
@@ -531,7 +531,7 @@ export async function getLoyaltyGauge(
         topRepeatTracks,
       },
     }
-  } catch (error) {
+  } catch {
     return getLoyaltyGaugeFallback(supabase, params)
   }
 }
@@ -873,8 +873,7 @@ const filterListensByWindow = (
 }
 
 const fetchValidListens = async (
-  supabase: SupabaseClient,
-  params: TimeWindowParams = {}
+  supabase: SupabaseClient
 ): Promise<AnalyticsResult<ValidListen[]>> => {
   const fromFn = (supabase as { from?: SupabaseClient["from"] }).from
 
@@ -1005,7 +1004,7 @@ const getDashboardSummaryFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<DashboardStats>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1031,7 +1030,7 @@ const getTopArtistsFallback = async (
   supabase: SupabaseClient,
   params: TopArtistsParams = {}
 ): Promise<AnalyticsResult<TopArtistDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1055,7 +1054,7 @@ const getTopTracksFallback = async (
   supabase: SupabaseClient,
   params: TopTracksParams = {}
 ): Promise<AnalyticsResult<TopTrackDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1091,7 +1090,7 @@ const getListeningTrendsFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<ListeningTrendDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1145,7 +1144,7 @@ const getWeeklyListeningTrendsFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<WeeklyListeningTrendDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1203,7 +1202,7 @@ const getListeningClockFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<ListeningClockDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1238,7 +1237,7 @@ const getListeningStreaksFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<ReturnType<typeof transformListeningStreak>>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1359,7 +1358,7 @@ const getDiscoveryTrackerFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<DiscoveryTrackerDatum[]>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1429,7 +1428,7 @@ const getLoyaltyGaugeFallback = async (
   supabase: SupabaseClient,
   params: TimeWindowParams = {}
 ): Promise<AnalyticsResult<LoyaltyGaugeData>> => {
-  const listensResult = await fetchValidListens(supabase, params)
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
@@ -1546,7 +1545,7 @@ const getLoyaltyGaugeFallback = async (
 const getAvailableTimeframesFallback = async (
   supabase: SupabaseClient
 ): Promise<AnalyticsResult<TimeframeData[]>> => {
-  const listensResult = await fetchValidListens(supabase, {})
+  const listensResult = await fetchValidListens(supabase)
   if (!listensResult.success) {
     return listensResult
   }
